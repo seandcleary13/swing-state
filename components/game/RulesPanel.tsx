@@ -15,7 +15,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "⚔ 2. Announce Attacks",
-    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to announce the attack; it resolves immediately. The odds are your Attack value against the enemy's Defense value (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
+    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to announce the attack; it resolves immediately. Each unit has a single Power value that works as both its attack and its defense. The odds are the attacker's Power against the defender's Power (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
   },
   {
     title: "🚶 3. All Units Move",
@@ -27,7 +27,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🧭 Unit Types",
-    body: "Cavalry (5 ATK / 3 DEF / 8 MOV) are the fastest unit on the field — they screen ahead, then strike and reposition. Infantry (4 ATK / 4 DEF / 4 MOV) are the balanced backbone of the army. Artillery (5 ATK / 2 DEF / 3 MOV) hits hardest but is fragile if caught alone.",
+    body: "Each unit's numbers read Power-Movement. Cavalry (3 Power / 5 Movement) are the fastest unit on the field — they screen ahead, then strike and reposition. Infantry (4 Power / 4 Movement) are the balanced backbone of the army. Artillery (5 Power / 3 Movement) hits hardest but is slow to reposition.",
   },
 ];
 

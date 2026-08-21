@@ -69,8 +69,8 @@ function advanceUnits(
         .map((n) => unitAt(working.units, n))
         .filter((u): u is Unit => !!u && u.faction === playerFaction);
       const goodFight = adjEnemies.some((e) => {
-        const atk = UNIT_TYPES[live.kind].attack;
-        const def = UNIT_TYPES[e.kind].defense + terrainBonus(working, e.pos);
+        const atk = UNIT_TYPES[live.kind].power;
+        const def = UNIT_TYPES[e.kind].power + terrainBonus(working, e.pos);
         return atk / Math.max(def, 0.5) >= 1;
       });
       if (goodFight) continue; // stay and fight this combat phase
@@ -130,8 +130,8 @@ export function runAiTurn(state: GameState): GameState {
     let bestTarget: Unit | null = null;
     let bestRatio = -Infinity;
     for (const t of targets) {
-      const atk = UNIT_TYPES[live.kind].attack;
-      const def = UNIT_TYPES[t.kind].defense + terrainBonus(working, t.pos);
+      const atk = UNIT_TYPES[live.kind].power;
+      const def = UNIT_TYPES[t.kind].power + terrainBonus(working, t.pos);
       const ratio = atk / Math.max(def, 0.5);
       if (ratio > bestRatio) {
         bestRatio = ratio;
@@ -142,8 +142,8 @@ export function runAiTurn(state: GameState): GameState {
 
     const attackerName = unitDisplayName(aiFaction, live.kind);
     const defenderName = unitDisplayName(playerFaction, bestTarget.kind);
-    const atk = UNIT_TYPES[live.kind].attack;
-    const def = UNIT_TYPES[bestTarget.kind].defense + terrainBonus(working, bestTarget.pos);
+    const atk = UNIT_TYPES[live.kind].power;
+    const def = UNIT_TYPES[bestTarget.kind].power + terrainBonus(working, bestTarget.pos);
     const roll = randomInt(1, 6);
     const { odds, result } = rollCombat(atk, def, roll);
     working = { ...working, lastCombat: { attacker: live.id, defender: bestTarget.id, odds, roll, result } };

@@ -1,9 +1,9 @@
 import type { UnitKind, UnitTypeDef } from "./types";
 
 export const UNIT_TYPES: Record<UnitKind, UnitTypeDef> = {
-  cavalry: { kind: "cavalry", name: "Cavalry", attack: 5, defense: 3, movement: 8, symbol: "CAV" },
-  infantry: { kind: "infantry", name: "Infantry", attack: 4, defense: 4, movement: 4, symbol: "INF" },
-  artillery: { kind: "artillery", name: "Artillery", attack: 5, defense: 2, movement: 3, symbol: "ART" },
+  cavalry: { kind: "cavalry", name: "Cavalry", power: 3, movement: 5, symbol: "CAV" },
+  infantry: { kind: "infantry", name: "Infantry", power: 4, movement: 4, symbol: "INF" },
+  artillery: { kind: "artillery", name: "Artillery", power: 5, movement: 3, symbol: "ART" },
 };
 
 // Faction-flavored display names for the same unit kinds.

@@ -180,8 +180,8 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (defender.faction !== state.aiFaction) return state;
       if (hexDistance(attacker.pos, defender.pos) !== 1) return state;
 
-      const atk = UNIT_TYPES[attacker.kind].attack;
-      const def = UNIT_TYPES[defender.kind].defense + terrainBonus(state, defender.pos);
+      const atk = UNIT_TYPES[attacker.kind].power;
+      const def = UNIT_TYPES[defender.kind].power + terrainBonus(state, defender.pos);
       const roll = Math.floor(Math.random() * 6) + 1;
       const { odds, result } = rollCombat(atk, def, roll);
       const attackerName = unitDisplayName(state.playerFaction, attacker.kind);

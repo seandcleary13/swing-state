@@ -145,7 +145,7 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
               {def.symbol}
             </text>
             <text x={x} y={y + 11} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={colors.text} opacity={0.95}>
-              {def.attack}-{def.defense}-{def.movement}
+              {def.power}-{def.movement}
             </text>
           </g>
         );

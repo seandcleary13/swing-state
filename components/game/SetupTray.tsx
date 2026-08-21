@@ -31,7 +31,7 @@ export default function SetupTray({ pool, pending, onSelect }: Props) {
           >
             <span>{unitDisplayName("france", kind)} ×{count}</span>
             <span className="text-[10px] opacity-80">
-              {UNIT_TYPES[kind].attack}-{UNIT_TYPES[kind].defense}-{UNIT_TYPES[kind].movement}
+              {UNIT_TYPES[kind].power}-{UNIT_TYPES[kind].movement}
             </span>
           </button>
         ))}

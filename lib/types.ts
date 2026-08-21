@@ -32,8 +32,7 @@ export type UnitKind = "cavalry" | "infantry" | "artillery";
 export interface UnitTypeDef {
   kind: UnitKind;
   name: string;
-  attack: number;
-  defense: number;
+  power: number; // single stat used as both attack and defense
   movement: number;
   symbol: string; // short glyph shown on the counter
 }
