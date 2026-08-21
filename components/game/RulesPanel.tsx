@@ -15,7 +15,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "⚔ 2. Announce Attacks",
-    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to announce the attack; it resolves immediately. Each unit has a single Power value that works as both its attack and its defense. The odds are the attacker's Power against the defender's Power (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
+    body: "Click an enemy unit to target it, then click any of your own units within range to commit them — you can pile on several units against one target before rolling. Their Power adds together. A preview shows the combined odds; click Attack to confirm and roll. Every unit can attack an adjacent enemy; Artillery can also fire from 2 hexes away, or 3 if it's standing on a hill. Each unit has a single Power value that works as both its attack and its defense, plus a terrain bonus for the defender if it's on a hill, in a forest, or in a town.",
+  },
+  {
+    title: "🎲 Combat Results Table",
+    body: "A die is rolled against the combined odds: Attacker(s) Eliminated, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Retreats are the most common outcome — the table favors the defender slightly, so even good odds often just push the defender back rather than destroying it. A defender that retreats falls back 2 hexes; if it has nowhere to go, it's eliminated instead. When a defender retreats, one of the attacking units that was directly adjacent to it (the strongest one, if more than one qualifies) advances into the ground it just vacated.",
   },
   {
     title: "🚶 3. All Units Move",

@@ -2,13 +2,26 @@ import { hexDistance, hexKey, type HexCoord } from "./hex";
 import { TERRAIN_DEFS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { ORDER_OF_BATTLE, UNIT_TYPES, isCavalryKind, unitDisplayName } from "./units";
+import { computeRetreat } from "./retreat";
+import { ORDER_OF_BATTLE, UNIT_TYPES, attackRange, isCavalryKind, unitDisplayName } from "./units";
 import { runAiTurn } from "./ai";
 import type { CombatLogEntry, Faction, GameState, Unit, UnitKind } from "./types";
 
 const COALITION_DEPLOY: Array<[number, number]> = [
   [12, 1], [11, 2], [12, 4], [11, 5], [12, 7], [11, 8], [12, 10], [11, 11], [12, 12],
 ];
+
+const RETREAT_HEXES = 2;
+
+function isOnHill(state: GameState, pos: HexCoord): boolean {
+  return state.map[hexKey(pos)]?.terrain === "hill";
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
 
 function newId(units: Record<string, Unit>, faction: Faction): string {
   const n = Object.values(units).filter((u) => u.faction === faction).length;
@@ -83,6 +96,8 @@ export function initGameState(): GameState {
     defenderFaction: "coalition",
     selectedUnitId: null,
     reachable: {},
+    combatTargetId: null,
+    combatAttackerIds: [],
     log: [
       {
         id: "start",
@@ -102,7 +117,9 @@ export type Action =
   | { type: "SETUP_PLACE"; kind: UnitKind; hex: HexCoord }
   | { type: "SELECT_UNIT"; unitId: string | null }
   | { type: "MOVE_UNIT"; hex: HexCoord }
-  | { type: "ATTACK"; defenderId: string }
+  | { type: "SELECT_ATTACK_TARGET"; targetId: string }
+  | { type: "CLEAR_ATTACK" }
+  | { type: "CONFIRM_ATTACK" }
   | { type: "END_PHASE" }
   | { type: "RESET" };
 
@@ -150,8 +167,32 @@ export function gameReducer(state: GameState, action: Action): GameState {
         const reachable = !unit.hasMoved ? computeReachable(state, unit) : {};
         return { ...state, selectedUnitId: action.unitId, reachable };
       }
-      // player-combat: selection just marks the attacker, no movement range to show.
+      if (state.phase === "player-combat") {
+        if (unit.hasAttacked || unit.routed) return { ...state, selectedUnitId: action.unitId };
+        const target = state.combatTargetId ? state.units[state.combatTargetId] : null;
+        if (!target) return { ...state, selectedUnitId: action.unitId };
+        const range = attackRange(unit.kind, isOnHill(state, unit.pos));
+        if (hexDistance(unit.pos, target.pos) > range) return { ...state, selectedUnitId: action.unitId };
+        const already = state.combatAttackerIds.includes(unit.id);
+        const combatAttackerIds = already
+          ? state.combatAttackerIds.filter((id) => id !== unit.id)
+          : [...state.combatAttackerIds, unit.id];
+        return { ...state, selectedUnitId: action.unitId, combatAttackerIds };
+      }
       return { ...state, selectedUnitId: action.unitId, reachable: {} };
+    }
+
+    case "SELECT_ATTACK_TARGET": {
+      if (state.phase !== "player-combat") return state;
+      const target = state.units[action.targetId];
+      if (!target || target.faction !== state.aiFaction) return state;
+      if (state.combatTargetId === action.targetId) return state;
+      return { ...state, combatTargetId: action.targetId, combatAttackerIds: [] };
+    }
+
+    case "CLEAR_ATTACK": {
+      if (state.phase !== "player-combat") return state;
+      return { ...state, combatTargetId: null, combatAttackerIds: [] };
     }
 
     case "MOVE_UNIT": {
@@ -180,58 +221,68 @@ export function gameReducer(state: GameState, action: Action): GameState {
       return next;
     }
 
-    case "ATTACK": {
-      if (state.phase !== "player-combat" || !state.selectedUnitId) return state;
-      const attacker = state.units[state.selectedUnitId];
-      const defender = state.units[action.defenderId];
-      if (!attacker || !defender || attacker.hasAttacked || attacker.routed) return state;
+    case "CONFIRM_ATTACK": {
+      if (state.phase !== "player-combat") return state;
+      if (!state.combatTargetId || state.combatAttackerIds.length === 0) return state;
+      const defender = state.units[state.combatTargetId];
+      const attackers = state.combatAttackerIds.map((id) => state.units[id]).filter((u): u is Unit => !!u);
+      if (!defender || !attackers.length) return state;
       if (defender.faction !== state.aiFaction) return state;
-      if (hexDistance(attacker.pos, defender.pos) !== 1) return state;
 
-      const atk = UNIT_TYPES[attacker.kind].power;
+      const atk = attackers.reduce((sum, u) => sum + UNIT_TYPES[u.kind].power, 0);
       const def = UNIT_TYPES[defender.kind].power + terrainBonus(state, defender.pos);
       const roll = Math.floor(Math.random() * 6) + 1;
       const { odds, result } = rollCombat(atk, def, roll);
-      const attackerName = unitDisplayName(state.playerFaction, attacker.kind);
+      const attackerNames = joinNames(attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)));
       const defenderName = unitDisplayName(state.aiFaction, defender.kind);
 
       let units = { ...state.units };
       let text = "";
+      const markAttacked = () => {
+        for (const a of attackers) units[a.id] = { ...units[a.id], hasAttacked: true };
+      };
+
       if (result === "NE") {
-        units[attacker.id] = { ...attacker, hasAttacked: true };
-        text = `${attackerName} attacks ${defenderName} at ${odds} — no effect (roll ${roll}).`;
+        markAttacked();
+        text = `${attackerNames} attack ${defenderName} at ${odds} — no effect (roll ${roll}).`;
       } else if (result === "AE") {
-        delete units[attacker.id];
-        text = `${attackerName} attacks ${defenderName} at ${odds} — our unit is repulsed and eliminated (roll ${roll}).`;
+        for (const a of attackers) delete units[a.id];
+        text = `${attackerNames} attack ${defenderName} at ${odds} — repulsed and eliminated (roll ${roll}).`;
       } else if (result === "DE") {
         delete units[defender.id];
-        units[attacker.id] = { ...attacker, hasAttacked: true };
-        text = `${attackerName} attacks ${defenderName} at ${odds} — enemy eliminated (roll ${roll})!`;
+        markAttacked();
+        text = `${attackerNames} attack ${defenderName} at ${odds} — enemy eliminated (roll ${roll})!`;
       } else if (result === "EX") {
-        delete units[attacker.id];
         delete units[defender.id];
-        text = `${attackerName} and ${defenderName} clash at ${odds} — both are destroyed (roll ${roll}).`;
+        const weakest = [...attackers].sort((a, b) => UNIT_TYPES[a.kind].power - UNIT_TYPES[b.kind].power)[0];
+        delete units[weakest.id];
+        for (const a of attackers) if (a.id !== weakest.id) units[a.id] = { ...units[a.id], hasAttacked: true };
+        text = `${attackerNames} clash with ${defenderName} at ${odds} — both sides lose a unit (roll ${roll}).`;
       } else if (result === "DR") {
-        units[attacker.id] = { ...attacker, hasAttacked: true };
-        const retreatCandidates = Object.entries(state.map)
-          .map(([, t]) => ({ col: t.col, row: t.row }))
-          .filter((h) => {
-            const tile = state.map[hexKey(h)];
-            if (!tile) return false;
-            if (unitAt(state.units, h)) return false;
-            return hexDistance(h, attacker.pos) > 1 && hexDistance(h, defender.pos) === 1;
-          });
-        if (retreatCandidates.length) {
-          const dest = retreatCandidates[0];
-          units[defender.id] = { ...defender, pos: dest, routed: true };
-          text = `${attackerName} attacks ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
+        const vacatedPos = defender.pos;
+        const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), RETREAT_HEXES);
+        markAttacked();
+        if (retreat) {
+          units[defender.id] = { ...defender, pos: retreat, routed: true };
+          const adjacent = attackers.filter((a) => hexDistance(a.pos, vacatedPos) === 1);
+          if (adjacent.length) {
+            const lead = adjacent.sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power)[0];
+            units[lead.id] = { ...units[lead.id], pos: vacatedPos };
+          }
+          text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
         } else {
           delete units[defender.id];
-          text = `${attackerName} attacks ${defenderName} at ${odds} — no room to retreat, enemy eliminated (roll ${roll}).`;
+          text = `${attackerNames} attack ${defenderName} at ${odds} — no room to retreat, enemy eliminated (roll ${roll}).`;
         }
       }
 
-      let next: GameState = { ...state, units, lastCombat: { attacker: attacker.id, defender: defender.id, odds, roll, result } };
+      let next: GameState = {
+        ...state,
+        units,
+        combatTargetId: null,
+        combatAttackerIds: [],
+        lastCombat: { attackers: attackers.map((a) => a.id), defender: defender.id, odds, roll, result },
+      };
       next = recomputeObjectiveControl(next);
       next = addLog(next, text, "combat");
       if (!Object.values(next.units).some((u) => u.faction === next.defenderFaction)) {
@@ -251,7 +302,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       }
 
       if (state.phase === "player-combat") {
-        return { ...state, phase: "player-move", selectedUnitId: null, reachable: {} };
+        return { ...state, phase: "player-move", selectedUnitId: null, reachable: {}, combatTargetId: null, combatAttackerIds: [] };
       }
 
       if (state.phase === "player-move") {

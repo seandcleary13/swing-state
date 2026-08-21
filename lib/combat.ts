@@ -13,14 +13,16 @@ const ODDS_COLUMNS = ["1:3", "1:2", "1:1", "2:1", "3:1", "4:1", "5:1"] as const;
 export type OddsColumn = (typeof ODDS_COLUMNS)[number];
 
 // Combat Results Table: [odds column][die roll 1-6]
+// Softer than a classic CRT: more retreats, fewer clean eliminations, and the
+// defender specifically is harder to wipe out outright (no DE below 2:1 odds).
 const CRT: Record<OddsColumn, CombatResult[]> = {
-  "1:3": ["AE", "AE", "AE", "DR", "DR", "NE"],
-  "1:2": ["AE", "AE", "DR", "DR", "EX", "EX"],
-  "1:1": ["AE", "DR", "DR", "EX", "EX", "DE"],
-  "2:1": ["DR", "DR", "EX", "EX", "DE", "DE"],
-  "3:1": ["DR", "DE", "DE", "DE", "DE", "DE"],
-  "4:1": ["DE", "DE", "DE", "DE", "DE", "DE"],
-  "5:1": ["DE", "DE", "DE", "DE", "DE", "DE"],
+  "1:3": ["AE", "AE", "DR", "DR", "DR", "NE"],
+  "1:2": ["AE", "DR", "DR", "DR", "EX", "NE"],
+  "1:1": ["AE", "DR", "DR", "DR", "EX", "EX"],
+  "2:1": ["DR", "DR", "DR", "EX", "EX", "DE"],
+  "3:1": ["DR", "DR", "EX", "EX", "DE", "DE"],
+  "4:1": ["DR", "EX", "DE", "DE", "DE", "DE"],
+  "5:1": ["EX", "DE", "DE", "DE", "DE", "DE"],
 };
 
 export function oddsColumnFor(attack: number, defense: number): OddsColumn {

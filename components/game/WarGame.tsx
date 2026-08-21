@@ -2,15 +2,16 @@
 
 import { useMemo, useReducer, useState } from "react";
 import { gameReducer, initGameState } from "@/lib/gameEngine";
-import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "@/lib/hex";
+import { hexDistance, hexKey, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
-import { isCavalryKind } from "@/lib/units";
+import { attackRange, isCavalryKind } from "@/lib/units";
 import type { UnitKind } from "@/lib/types";
 import HexGrid from "./HexGrid";
 import TurnBanner from "./TurnBanner";
 import SetupTray from "./SetupTray";
 import UnitInfoPanel from "./UnitInfoPanel";
 import CombatLog from "./CombatLog";
+import CombatPreview from "./CombatPreview";
 import VictoryModal from "./VictoryModal";
 import RulesPanel from "./RulesPanel";
 import { cn } from "@/lib/utils";
@@ -20,14 +21,31 @@ export default function WarGame() {
   const [pendingKind, setPendingKind] = useState<UnitKind | null>(null);
   const [tab, setTab] = useState<"battle" | "rules">("battle");
 
-  const attackableIds = useMemo(() => {
+  const isOnHill = (pos: HexCoord) => state.map[hexKey(pos)]?.terrain === "hill";
+
+  // Enemies that at least one un-attacked player unit could target (for the red "can be attacked" ring).
+  const targetableEnemyIds = useMemo(() => {
     const set = new Set<string>();
-    if (state.phase !== "player-combat" || !state.selectedUnitId) return set;
-    const attacker = state.units[state.selectedUnitId];
-    if (!attacker || attacker.hasAttacked) return set;
-    for (const n of hexNeighbors(attacker.pos)) {
-      const enemy = unitAt(state.units, n);
-      if (enemy && enemy.faction === state.aiFaction) set.add(enemy.id);
+    if (state.phase !== "player-combat") return set;
+    const mine = Object.values(state.units).filter(
+      (u) => u.faction === state.playerFaction && !u.hasAttacked && !u.routed
+    );
+    for (const e of Object.values(state.units)) {
+      if (e.faction !== state.aiFaction) continue;
+      if (mine.some((m) => hexDistance(m.pos, e.pos) <= attackRange(m.kind, isOnHill(m.pos)))) set.add(e.id);
+    }
+    return set;
+  }, [state]);
+
+  // Player units in range of the currently-targeted enemy, available to add to the attack.
+  const eligibleAttackerIds = useMemo(() => {
+    const set = new Set<string>();
+    if (state.phase !== "player-combat" || !state.combatTargetId) return set;
+    const target = state.units[state.combatTargetId];
+    if (!target) return set;
+    for (const u of Object.values(state.units)) {
+      if (u.faction !== state.playerFaction || u.hasAttacked || u.routed) continue;
+      if (hexDistance(u.pos, target.pos) <= attackRange(u.kind, isOnHill(u.pos))) set.add(u.id);
     }
     return set;
   }, [state]);
@@ -68,13 +86,10 @@ export default function WarGame() {
     }
 
     if (state.phase === "player-combat") {
-      if (occ && occ.faction === state.playerFaction) {
-        dispatch({ type: "SELECT_UNIT", unitId: occ.hasAttacked ? null : occ.id });
-      } else if (occ && occ.faction === state.aiFaction && state.selectedUnitId) {
-        const attacker = state.units[state.selectedUnitId];
-        if (attacker && hexDistance(attacker.pos, occ.pos) === 1) {
-          dispatch({ type: "ATTACK", defenderId: occ.id });
-        }
+      if (occ && occ.faction === state.aiFaction) {
+        dispatch({ type: "SELECT_ATTACK_TARGET", targetId: occ.id });
+      } else if (occ && occ.faction === state.playerFaction) {
+        dispatch({ type: "SELECT_UNIT", unitId: occ.id });
       } else {
         dispatch({ type: "SELECT_UNIT", unitId: null });
       }
@@ -116,8 +131,21 @@ export default function WarGame() {
               <SetupTray pool={state.setupPool.france} pending={pendingKind} onSelect={setPendingKind} />
             )}
 
+            {state.phase === "player-combat" && (
+              <CombatPreview
+                state={state}
+                onConfirm={() => dispatch({ type: "CONFIRM_ATTACK" })}
+                onClear={() => dispatch({ type: "CLEAR_ATTACK" })}
+              />
+            )}
+
             <div className="rounded-lg border border-[#3a2f1c] bg-[#0f0c07] p-2">
-              <HexGrid state={state} onHexClick={handleHexClick} attackableIds={attackableIds} />
+              <HexGrid
+                state={state}
+                onHexClick={handleHexClick}
+                attackableIds={targetableEnemyIds}
+                eligibleAttackerIds={eligibleAttackerIds}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

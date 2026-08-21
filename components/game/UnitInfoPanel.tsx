@@ -1,7 +1,7 @@
 "use client";
 
 import { TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES, unitDisplayName } from "@/lib/units";
+import { UNIT_TYPES, attackRange, unitDisplayName } from "@/lib/units";
 import type { GameState } from "@/lib/types";
 import { hexKey } from "@/lib/hex";
 
@@ -11,7 +11,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
     return (
       <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3 text-sm text-[#8a7f63]">
         {state.phase === "player-cavalry-move" && "Select one of your Cavalry units to see its movement range."}
-        {state.phase === "player-combat" && "Select one of your units to announce an attack on an adjacent enemy."}
+        {state.phase === "player-combat" && "Click an enemy to target it, then click your units in range to commit them, then confirm the attack."}
         {state.phase === "player-move" && "Select one of your units to see its movement range."}
         {state.phase === "setup" && "Choose a unit from the tray, then place it."}
         {state.phase === "game-over" && "The campaign has ended."}
@@ -20,6 +20,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
   }
   const def = UNIT_TYPES[unit.kind];
   const tile = state.map[hexKey(unit.pos)];
+  const range = attackRange(unit.kind, tile.terrain === "hill");
 
   return (
     <div className="rounded-lg border border-[#f4d35e] bg-[#17130c] px-4 py-3">
@@ -27,6 +28,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
       <div className="text-xs text-[#cbbf9c] flex gap-3 mb-1">
         <span>POWER {def.power}</span>
         <span>MOV {def.movement}</span>
+        {unit.kind === "artillery" && <span>RANGE {range}</span>}
       </div>
       <div className="text-xs text-[#8a7f63]">
         On {TERRAIN_DEFS[tile.terrain].label}

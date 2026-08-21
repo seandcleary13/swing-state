@@ -2,8 +2,11 @@ import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { TERRAIN_DEFS } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { UNIT_TYPES, isCavalryKind, unitDisplayName } from "./units";
+import { computeRetreat } from "./retreat";
+import { UNIT_TYPES, attackRange, isCavalryKind, unitDisplayName } from "./units";
 import type { CombatLogEntry, Faction, GameState, Unit } from "./types";
+
+const RETREAT_HEXES = 2;
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -14,16 +17,8 @@ function terrainBonus(state: GameState, pos: HexCoord): number {
   return tile ? TERRAIN_DEFS[tile.terrain].defenseBonus : 0;
 }
 
-function findRetreatHex(state: GameState, defender: Unit, attacker: Unit): HexCoord | null {
-  const options = hexNeighbors(defender.pos).filter((n) => {
-    const tile = state.map[hexKey(n)];
-    if (!tile) return false;
-    if (unitAt(state.units, n)) return false;
-    return hexDistance(n, attacker.pos) > hexDistance(defender.pos, attacker.pos);
-  });
-  if (!options.length) return null;
-  options.sort((a, b) => hexDistance(b, attacker.pos) - hexDistance(a, attacker.pos));
-  return options[0];
+function isOnHill(state: GameState, pos: HexCoord): boolean {
+  return state.map[hexKey(pos)]?.terrain === "hill";
 }
 
 // The Coalition defends: it already holds every town, so its priority is retaking any
@@ -126,9 +121,10 @@ export function runAiTurn(state: GameState): GameState {
   for (const unit of Object.values(working.units).filter((u) => u.faction === aiFaction)) {
     const live = working.units[unit.id];
     if (!live || live.hasAttacked) continue;
-    const targets = hexNeighbors(live.pos)
-      .map((n) => unitAt(working.units, n))
-      .filter((u): u is Unit => !!u && u.faction === playerFaction);
+    const range = attackRange(live.kind, isOnHill(working, live.pos));
+    const targets = Object.values(working.units).filter(
+      (u) => u.faction === playerFaction && hexDistance(live.pos, u.pos) <= range
+    );
     if (!targets.length) continue;
 
     let bestTarget: Unit | null = null;
@@ -150,7 +146,9 @@ export function runAiTurn(state: GameState): GameState {
     const def = UNIT_TYPES[bestTarget.kind].power + terrainBonus(working, bestTarget.pos);
     const roll = randomInt(1, 6);
     const { odds, result } = rollCombat(atk, def, roll);
-    working = { ...working, lastCombat: { attacker: live.id, defender: bestTarget.id, odds, roll, result } };
+    working = { ...working, lastCombat: { attackers: [live.id], defender: bestTarget.id, odds, roll, result } };
+    const wasAdjacent = hexDistance(live.pos, bestTarget.pos) === 1;
+    const vacatedPos = bestTarget.pos;
 
     if (result === "NE") {
       addLog(`${attackerName} attacks ${defenderName} at ${odds} — no effect (roll ${roll}).`, "combat");
@@ -169,10 +167,11 @@ export function runAiTurn(state: GameState): GameState {
       addLog(`${attackerName} and ${defenderName} clash at ${odds} — both eliminated (roll ${roll}).`, "combat");
       continue;
     } else if (result === "DR") {
-      const retreat = findRetreatHex(working, bestTarget, live);
+      const retreat = computeRetreat(working, bestTarget.pos, [live.pos], RETREAT_HEXES);
       if (retreat) {
         working.units[bestTarget.id] = { ...bestTarget, pos: retreat, routed: true };
         addLog(`${attackerName} attacks ${defenderName} at ${odds} — defender retreats (roll ${roll}).`, "combat");
+        if (wasAdjacent) working.units[live.id] = { ...working.units[live.id], pos: vacatedPos };
       } else {
         const { [bestTarget.id]: _drop, ...rest } = working.units;
         working = { ...working, units: rest };

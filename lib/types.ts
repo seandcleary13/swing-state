@@ -78,9 +78,12 @@ export interface GameState {
   defenderFaction: Faction;
   selectedUnitId: string | null;
   reachable: Record<string, number>; // hexKey -> remaining MP cost map for highlight
+  /** Combined-attack staging: an enemy targeted this combat phase, and the player units committed against it. */
+  combatTargetId: string | null;
+  combatAttackerIds: string[];
   log: CombatLogEntry[];
   setupPool: Record<Faction, UnitKind[]>; // remaining units to deploy
   winner: Faction | "draw" | null;
   victoryReason: VictoryReason | null;
-  lastCombat: { attacker: string; defender: string; odds: string; roll: number; result: string } | null;
+  lastCombat: { attackers: string[]; defender: string; odds: string; roll: number; result: string } | null;
 }

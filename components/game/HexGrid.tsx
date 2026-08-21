@@ -22,10 +22,13 @@ const FACTION_COLOR: Record<Faction, { fill: string; ring: string; text: string 
 interface Props {
   state: GameState;
   onHexClick: (hex: HexCoord) => void;
+  /** Enemy units at least one un-attacked player unit could target. */
   attackableIds: Set<string>;
+  /** Player units in range of the currently-targeted enemy, available to add to the attack. */
+  eligibleAttackerIds: Set<string>;
 }
 
-export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
+export default function HexGrid({ state, onHexClick, attackableIds, eligibleAttackerIds }: Props) {
   const { map, units, selectedUnitId, reachable, phase, playerFaction } = state;
   const width = COLS * 51 + 60;
   const height = ROWS * 59 + 90;
@@ -120,12 +123,36 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
         const colors = FACTION_COLOR[unit.faction];
         const def = UNIT_TYPES[unit.kind];
         const isSelected = selectedUnitId === unit.id;
-        const isAttackable = attackableIds.has(unit.id);
+        const isTargetable = attackableIds.has(unit.id);
+        const isTarget = state.combatTargetId === unit.id;
+        const isCommitted = state.combatAttackerIds.includes(unit.id);
+        const isEligible = eligibleAttackerIds.has(unit.id);
         const isPlayer = unit.faction === playerFaction;
         const dimmed =
           (phase === "player-cavalry-move" && isPlayer && (!isCavalryKind(unit.kind) || unit.hasCavalryMoved)) ||
           (phase === "player-combat" && isPlayer && unit.hasAttacked) ||
           (phase === "player-move" && isPlayer && unit.hasMoved);
+
+        let stroke = "#1a1608";
+        let strokeWidth = 1.4;
+        let dash: string | undefined = unit.routed ? "3 2" : undefined;
+        if (isTarget) {
+          stroke = "#ff6b6b";
+          strokeWidth = 4;
+        } else if (isCommitted) {
+          stroke = "#f4d35e";
+          strokeWidth = 3.5;
+        } else if (isSelected) {
+          stroke = "#f4d35e";
+          strokeWidth = 3;
+        } else if (isEligible) {
+          stroke = "#ece2c8";
+          strokeWidth = 2;
+          dash = "2 2";
+        } else if (isTargetable) {
+          stroke = "#ff6b6b";
+          strokeWidth = 2;
+        }
 
         return (
           <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
@@ -136,10 +163,10 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
               height={34}
               rx={4}
               fill={colors.fill}
-              stroke={isSelected ? "#f4d35e" : isAttackable ? "#ff6b6b" : "#1a1608"}
-              strokeWidth={isSelected || isAttackable ? 3 : 1.4}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
               opacity={dimmed ? 0.55 : 1}
-              strokeDasharray={unit.routed ? "3 2" : undefined}
+              strokeDasharray={dash}
             />
             <text x={x} y={y - 4} textAnchor="middle" fontSize={13} fontWeight={800} fill={colors.text}>
               {def.symbol}

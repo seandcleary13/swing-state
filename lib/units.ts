@@ -32,6 +32,12 @@ export function isCavalryKind(kind: UnitKind): boolean {
   return kind === "cavalry" || kind === "heavy-cavalry";
 }
 
+// Every unit can attack an adjacent hex. Artillery can also fire at range 2 — or 3 while it holds a hill.
+export function attackRange(kind: UnitKind, attackerOnHill: boolean): number {
+  if (kind !== "artillery") return 1;
+  return attackerOnHill ? 3 : 2;
+}
+
 // Order of battle for each side — 9 units, small tutorial-scale scenario.
 export const ORDER_OF_BATTLE: UnitKind[] = [
   "infantry",
