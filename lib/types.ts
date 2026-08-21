@@ -7,7 +7,6 @@ export type TerrainType =
   | "forest"
   | "hill"
   | "town"
-  | "river"
   | "marsh";
 
 export interface TerrainDef {
@@ -28,14 +27,7 @@ export interface HexTile {
   deploymentFor?: Faction;
 }
 
-export type UnitKind =
-  | "guard-infantry"
-  | "line-infantry"
-  | "light-infantry"
-  | "heavy-cavalry"
-  | "light-cavalry"
-  | "horse-artillery"
-  | "foot-artillery";
+export type UnitKind = "cavalry" | "infantry" | "artillery";
 
 export interface UnitTypeDef {
   kind: UnitKind;
@@ -51,12 +43,19 @@ export interface Unit {
   faction: Faction;
   kind: UnitKind;
   pos: HexCoord;
-  hasMoved: boolean;
+  hasCavalryMoved: boolean; // consumed only by the opening cavalry-only movement phase
+  hasMoved: boolean; // consumed by the general movement phase (every unit type, incl. cavalry again)
   hasAttacked: boolean;
-  routed: boolean; // retreated this turn, disordered until its side's next move phase
+  routed: boolean; // retreated this turn, disordered until its side's next cavalry-move phase
 }
 
-export type GamePhase = "setup" | "player-move" | "player-combat" | "game-over";
+// Turn order: cavalry advances alone, then everyone fights, then everyone (incl. cavalry again) repositions.
+export type GamePhase =
+  | "setup"
+  | "player-cavalry-move"
+  | "player-combat"
+  | "player-move"
+  | "game-over";
 
 export interface CombatLogEntry {
   id: string;

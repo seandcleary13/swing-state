@@ -3,7 +3,7 @@
 import { hexCenter, hexCorners, hexKey, hexNeighbors, type HexCoord } from "@/lib/hex";
 import { COLS, ROWS, TERRAIN_DEFS } from "@/lib/mapData";
 import { UNIT_TYPES } from "@/lib/units";
-import type { Faction, GamePhase, GameState, Unit } from "@/lib/types";
+import type { Faction, GameState, Unit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TERRAIN_FILL: Record<string, string> = {
@@ -11,7 +11,6 @@ const TERRAIN_FILL: Record<string, string> = {
   forest: "#3f5a30",
   hill: "#9c8253",
   town: "#c7a24a",
-  river: "#4a7fa8",
   marsh: "#5f7259",
 };
 
@@ -122,16 +121,19 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
         const def = UNIT_TYPES[unit.kind];
         const isSelected = selectedUnitId === unit.id;
         const isAttackable = attackableIds.has(unit.id);
-        const dimmed = (phase === "player-move" && unit.faction === playerFaction && unit.hasMoved) ||
-          (phase === "player-combat" && unit.faction === playerFaction && unit.hasAttacked);
+        const isPlayer = unit.faction === playerFaction;
+        const dimmed =
+          (phase === "player-cavalry-move" && isPlayer && (unit.kind !== "cavalry" || unit.hasCavalryMoved)) ||
+          (phase === "player-combat" && isPlayer && unit.hasAttacked) ||
+          (phase === "player-move" && isPlayer && unit.hasMoved);
 
         return (
           <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
             <rect
-              x={x - 16}
-              y={y - 15}
-              width={32}
-              height={30}
+              x={x - 19}
+              y={y - 17}
+              width={38}
+              height={34}
               rx={4}
               fill={colors.fill}
               stroke={isSelected ? "#f4d35e" : isAttackable ? "#ff6b6b" : "#1a1608"}
@@ -139,10 +141,10 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
               opacity={dimmed ? 0.55 : 1}
               strokeDasharray={unit.routed ? "3 2" : undefined}
             />
-            <text x={x} y={y - 4} textAnchor="middle" fontSize={10} fontWeight={800} fill={colors.text}>
+            <text x={x} y={y - 4} textAnchor="middle" fontSize={13} fontWeight={800} fill={colors.text}>
               {def.symbol}
             </text>
-            <text x={x} y={y + 9} textAnchor="middle" fontSize={7.5} fill={colors.text} opacity={0.9}>
+            <text x={x} y={y + 11} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={colors.text} opacity={0.95}>
               {def.attack}-{def.defense}-{def.movement}
             </text>
           </g>

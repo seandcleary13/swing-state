@@ -44,6 +44,17 @@ export default function WarGame() {
       return;
     }
 
+    if (state.phase === "player-cavalry-move") {
+      if (occ && occ.faction === state.playerFaction) {
+        dispatch({ type: "SELECT_UNIT", unitId: occ.kind === "cavalry" && !occ.hasCavalryMoved ? occ.id : null });
+      } else if (state.selectedUnitId && key in state.reachable) {
+        dispatch({ type: "MOVE_UNIT", hex });
+      } else {
+        dispatch({ type: "SELECT_UNIT", unitId: null });
+      }
+      return;
+    }
+
     if (state.phase === "player-move") {
       if (occ && occ.faction === state.playerFaction) {
         dispatch({ type: "SELECT_UNIT", unitId: occ.hasMoved ? null : occ.id });

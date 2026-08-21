@@ -10,20 +10,24 @@ const SECTIONS: { title: string; body: string }[] = [
     body: "Place your 8 units on the highlighted western hexes before Turn 1. Choose a unit from the tray, then click a deployment hex. Once all 8 are placed, the campaign begins.",
   },
   {
-    title: "🚶 Movement Phase",
-    body: "Select one of your units to see every hex it can reach this turn, based on its movement allowance and the terrain cost of each hex it crosses. Roads let units move quickly along them (cost 1 per hex). Units cannot stack — only one unit per hex, friend or foe. A unit that ends its move next to an enemy unit is in that enemy's Zone of Control and stops there, even if it had movement points left.",
+    title: "🐎 1. Cavalry Movement Phase",
+    body: "Cavalry moves first, alone. Only your Cavalry units can move this phase — Infantry and Artillery hold their positions. Movement is based on the unit's Move value and the terrain cost of each hex it crosses; roads are fast (1 hex per move point). Units can't stack — one per hex, friend or foe. A unit that ends its move next to an enemy is in that enemy's Zone of Control and stops there.",
   },
   {
-    title: "⚔ Combat Phase",
-    body: "Select one of your units and click an adjacent enemy to attack. The odds are your Attack value against the enemy's Defense value (plus a terrain bonus if they're on a hill, in a forest, in a town, or across a river). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
+    title: "⚔ 2. Combat Phase",
+    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to attack. The odds are your Attack value against the enemy's Defense value (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
+  },
+  {
+    title: "🚶 3. Movement Phase",
+    body: "Every unit — including Cavalry a second time — may move once more, repositioning after the fighting. This is the only movement Infantry and Artillery get each turn; Cavalry gets this move on top of its earlier advance, giving it two moves in a single turn.",
   },
   {
     title: "🗺 Terrain",
-    body: "Open Field: no penalty. Forest & Hill: +2 defense bonus, costs 2 movement points to enter. Town: +2 defense bonus, an objective. River: +1 defense bonus, costs 3 movement points to cross (bridges on the two roads cost only 1). Marsh: +1 defense bonus, costs 3 movement points.",
+    body: "Open Field: no penalty. Forest & Hill: +2 defense bonus, costs 2 movement points to enter. Town: +2 defense bonus, an objective. Marsh: +1 defense bonus, costs 3 movement points.",
   },
   {
     title: "🧭 Unit Types",
-    body: "Guard Infantry (6-6-4) are your toughest troops. Line Infantry (4-4-4) are the backbone of the army. Light Infantry (3-3-5) skirmish quickly. Heavy Cavalry (5-3-8) hit hard and move fast but defend poorly. Light Cavalry (4-2-9) are the fastest unit on the field, ideal for grabbing undefended towns. Horse Artillery (4-2-6) and Foot Artillery (5-2-3) hit hardest but are fragile if caught alone — numbers read Attack-Defense-Movement.",
+    body: "Cavalry (5 ATK / 3 DEF / 8 MOV) are the fastest unit on the field — they screen ahead, then strike and reposition. Infantry (4 ATK / 4 DEF / 4 MOV) are the balanced backbone of the army. Artillery (5 ATK / 2 DEF / 3 MOV) hits hardest but is fragile if caught alone.",
   },
 ];
 

@@ -42,39 +42,39 @@ function nearestTargetDistance(state: GameState, from: HexCoord, aiFaction: Fact
   return Math.min(...targets.map((t) => hexDistance(from, t)));
 }
 
-export function runAiTurn(state: GameState): GameState {
-  const aiFaction = state.aiFaction;
-  const playerFaction = state.playerFaction;
-  const units: Record<string, Unit> = {};
-  for (const [id, u] of Object.entries(state.units)) {
-    units[id] = { ...u, hasMoved: u.faction === aiFaction ? false : u.hasMoved, hasAttacked: u.faction === aiFaction ? false : u.hasAttacked, routed: u.faction === aiFaction ? false : u.routed };
-  }
-  const map = Object.fromEntries(Object.entries(state.map).map(([k, v]) => [k, { ...v }]));
-  const log: CombatLogEntry[] = [...state.log];
-  let working: GameState = { ...state, units, map, log };
-
-  const addLog = (text: string, kind: CombatLogEntry["kind"] = "info") => {
-    working = { ...working, log: [{ id: `${Date.now()}-${Math.random()}`, turn: working.turn, text, kind }, ...working.log].slice(0, 40) };
-  };
-
-  // --- Movement ---
-  const aiUnits = Object.values(working.units)
-    .filter((u) => u.faction === aiFaction)
+/**
+ * Advances every eligible AI unit one hex-move closer to its nearest objective/enemy.
+ * `moveFlag` selects which per-unit flag records that the move was spent (cavalry get
+ * two independent move flags per turn: one for the opening cavalry phase, one for the
+ * closing general movement phase all unit types share).
+ */
+function advanceUnits(
+  working: GameState,
+  aiFaction: Faction,
+  playerFaction: Faction,
+  eligible: (u: Unit) => boolean,
+  moveFlag: "hasCavalryMoved" | "hasMoved",
+  skipIfGoodFight: boolean
+): GameState {
+  const units = Object.values(working.units)
+    .filter((u) => u.faction === aiFaction && eligible(u))
     .sort((a, b) => UNIT_TYPES[b.kind].movement - UNIT_TYPES[a.kind].movement);
 
-  for (const unit of aiUnits) {
+  for (const unit of units) {
     const live = working.units[unit.id];
     if (!live) continue;
 
-    const adjEnemies = hexNeighbors(live.pos)
-      .map((n) => unitAt(working.units, n))
-      .filter((u): u is Unit => !!u && u.faction === playerFaction);
-    const goodFight = adjEnemies.some((e) => {
-      const atk = UNIT_TYPES[live.kind].attack;
-      const def = UNIT_TYPES[e.kind].defense + terrainBonus(working, e.pos);
-      return atk / Math.max(def, 0.5) >= 1;
-    });
-    if (goodFight) continue; // stay and fight this combat phase
+    if (skipIfGoodFight) {
+      const adjEnemies = hexNeighbors(live.pos)
+        .map((n) => unitAt(working.units, n))
+        .filter((u): u is Unit => !!u && u.faction === playerFaction);
+      const goodFight = adjEnemies.some((e) => {
+        const atk = UNIT_TYPES[live.kind].attack;
+        const def = UNIT_TYPES[e.kind].defense + terrainBonus(working, e.pos);
+        return atk / Math.max(def, 0.5) >= 1;
+      });
+      if (goodFight) continue; // stay and fight this combat phase
+    }
 
     const reachable = computeReachable(working, live);
     const currentDist = nearestTargetDistance(working, live.pos, aiFaction);
@@ -87,11 +87,38 @@ export function runAiTurn(state: GameState): GameState {
       }
     }
     if (best) {
-      working.units[unit.id] = { ...live, pos: best.hex, hasMoved: true };
+      working.units[unit.id] = { ...live, pos: best.hex, [moveFlag]: true };
     }
   }
+  return working;
+}
 
-  // --- Combat ---
+export function runAiTurn(state: GameState): GameState {
+  const aiFaction = state.aiFaction;
+  const playerFaction = state.playerFaction;
+  const units: Record<string, Unit> = {};
+  for (const [id, u] of Object.entries(state.units)) {
+    const isAi = u.faction === aiFaction;
+    units[id] = {
+      ...u,
+      hasCavalryMoved: isAi ? false : u.hasCavalryMoved,
+      hasMoved: isAi ? false : u.hasMoved,
+      hasAttacked: isAi ? false : u.hasAttacked,
+      routed: isAi ? false : u.routed,
+    };
+  }
+  const map = Object.fromEntries(Object.entries(state.map).map(([k, v]) => [k, { ...v }]));
+  const log: CombatLogEntry[] = [...state.log];
+  let working: GameState = { ...state, units, map, log };
+
+  const addLog = (text: string, kind: CombatLogEntry["kind"] = "info") => {
+    working = { ...working, log: [{ id: `${Date.now()}-${Math.random()}`, turn: working.turn, text, kind }, ...working.log].slice(0, 40) };
+  };
+
+  // --- Phase 1: cavalry advances alone ---
+  working = advanceUnits(working, aiFaction, playerFaction, (u) => u.kind === "cavalry", "hasCavalryMoved", true);
+
+  // --- Phase 2: everyone attacks ---
   for (const unit of Object.values(working.units).filter((u) => u.faction === aiFaction)) {
     const live = working.units[unit.id];
     if (!live || live.hasAttacked) continue;
@@ -150,6 +177,9 @@ export function runAiTurn(state: GameState): GameState {
     }
     working.units[live.id] = { ...working.units[live.id], hasAttacked: true };
   }
+
+  // --- Phase 3: everyone (cavalry included, a second time) repositions ---
+  working = advanceUnits(working, aiFaction, playerFaction, () => true, "hasMoved", false);
 
   // --- Update objective control ---
   const map2 = { ...working.map };

@@ -9,7 +9,6 @@ export const TERRAIN_DEFS: Record<TerrainType, TerrainDef> = {
   forest: { moveCost: 2, defenseBonus: 2, label: "Forest" },
   hill: { moveCost: 2, defenseBonus: 2, label: "Hill" },
   town: { moveCost: 1, defenseBonus: 2, label: "Village" },
-  river: { moveCost: 3, defenseBonus: 1, label: "River" },
   marsh: { moveCost: 3, defenseBonus: 1, label: "Marsh" },
 };
 
@@ -27,12 +26,9 @@ export const TOWNS: TownDef[] = [
   { col: 3, row: 11, name: "Vieuxpont" },
 ];
 
-const RIVER_HEXES: Array<[number, number]> = [
-  [6, 0], [6, 1], [6, 2], [5, 3], [5, 4], [5, 5],
-  [4, 6], [3, 7], [3, 8], [3, 9], [2, 10], [2, 11], [2, 12], [2, 13],
-];
-
 const HILL_HEXES: Array<[number, number]> = [
+  [6, 0], [6, 1], [6, 2], [5, 4], [5, 5],
+  [3, 7], [3, 8], [3, 9], [2, 11], [2, 12],
   [7, 4], [7, 5], [8, 5], [1, 9], [1, 10], [8, 8], [8, 9],
 ];
 
@@ -53,7 +49,6 @@ function mulberry32(seed: number) {
 
 export function buildMap(): Record<string, HexTile> {
   const rng = mulberry32(1815);
-  const riverSet = new Set(RIVER_HEXES.map(([c, r]) => `${c},${r}`));
   const hillSet = new Set(HILL_HEXES.map(([c, r]) => `${c},${r}`));
   const marshSet = new Set(MARSH_HEXES.map(([c, r]) => `${c},${r}`));
   const townMap = new Map(TOWNS.map((t) => [`${t.col},${t.row}`, t]));
@@ -77,8 +72,6 @@ export function buildMap(): Record<string, HexTile> {
         terrain = "town";
         objective = true;
         objectiveName = town.name;
-      } else if (riverSet.has(key)) {
-        terrain = "river";
       } else if (hillSet.has(key)) {
         terrain = "hill";
       } else if (marshSet.has(key)) {
@@ -91,23 +84,13 @@ export function buildMap(): Record<string, HexTile> {
         col,
         row,
         terrain,
-        road: onRoad && terrain !== "river" && terrain !== "marsh",
+        road: onRoad && terrain !== "marsh",
         objective,
         objectiveName,
         controlledBy,
         deploymentFor: isDeployFrance ? "france" : isDeployCoalition ? "coalition" : undefined,
       };
       map[hexKey({ col, row })] = tile;
-    }
-  }
-
-  // Roads bridge the river at their crossing points.
-  for (const row of ROAD_ROWS) {
-    for (let col = 0; col < COLS; col++) {
-      const key = `${col},${row}`;
-      if (riverSet.has(key) && map[key]) {
-        map[key].road = true;
-      }
     }
   }
 

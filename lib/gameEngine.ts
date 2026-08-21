@@ -33,7 +33,7 @@ function recomputeObjectiveControl(state: GameState): GameState {
 function resetFactionFlags(state: GameState, faction: Faction): GameState {
   const units = { ...state.units };
   for (const [id, u] of Object.entries(units)) {
-    if (u.faction === faction) units[id] = { ...u, hasMoved: false, hasAttacked: false, routed: false };
+    if (u.faction === faction) units[id] = { ...u, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false };
   }
   return { ...state, units };
 }
@@ -67,7 +67,7 @@ export function initGameState(): GameState {
   ORDER_OF_BATTLE.forEach((kind, i) => {
     const [col, row] = COALITION_DEPLOY[i];
     const id = `coalition-${i}`;
-    units[id] = { id, faction: "coalition", kind, pos: { col, row }, hasMoved: false, hasAttacked: false, routed: false };
+    units[id] = { id, faction: "coalition", kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false };
   });
 
   return {
@@ -117,15 +117,18 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (unitAt(state.units, action.hex)) return state;
 
       const id = newId(state.units, "france");
-      const units = { ...state.units, [id]: { id, faction: "france" as const, kind: action.kind, pos: action.hex, hasMoved: false, hasAttacked: false, routed: false } };
+      const units = {
+        ...state.units,
+        [id]: { id, faction: "france" as const, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false },
+      };
       const newPool = [...pool];
       newPool.splice(idx, 1);
       const setupPool = { ...state.setupPool, france: newPool };
       const done = newPool.length === 0;
 
-      let next: GameState = { ...state, units, setupPool, phase: done ? "player-move" : "setup" };
+      let next: GameState = { ...state, units, setupPool, phase: done ? "player-cavalry-move" : "setup" };
       next = addLog(next, `${unitDisplayName("france", action.kind)} deployed to ${tile.objectiveName ?? `hex ${action.hex.col}-${action.hex.row}`}.`, "setup");
-      if (done) next = addLog(next, "Deployment complete. Turn 1 begins — move your units, then attack.", "info");
+      if (done) next = addLog(next, "Deployment complete. Turn 1 begins — cavalry advances first.", "info");
       return next;
     }
 
@@ -133,18 +136,36 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (action.unitId === null) return { ...state, selectedUnitId: null, reachable: {} };
       const unit = state.units[action.unitId];
       if (!unit || unit.faction !== state.playerFaction) return state;
-      const reachable = state.phase === "player-move" && !unit.hasMoved ? computeReachable(state, unit) : {};
-      return { ...state, selectedUnitId: action.unitId, reachable };
+
+      if (state.phase === "player-cavalry-move") {
+        if (unit.kind !== "cavalry") return state;
+        const reachable = !unit.hasCavalryMoved ? computeReachable(state, unit) : {};
+        return { ...state, selectedUnitId: action.unitId, reachable };
+      }
+      if (state.phase === "player-move") {
+        const reachable = !unit.hasMoved ? computeReachable(state, unit) : {};
+        return { ...state, selectedUnitId: action.unitId, reachable };
+      }
+      // player-combat: selection just marks the attacker, no movement range to show.
+      return { ...state, selectedUnitId: action.unitId, reachable: {} };
     }
 
     case "MOVE_UNIT": {
-      if (state.phase !== "player-move" || !state.selectedUnitId) return state;
+      if (!state.selectedUnitId) return state;
+      if (state.phase !== "player-cavalry-move" && state.phase !== "player-move") return state;
       const unit = state.units[state.selectedUnitId];
-      if (!unit || unit.hasMoved) return state;
+      if (!unit) return state;
+      if (state.phase === "player-cavalry-move" && (unit.kind !== "cavalry" || unit.hasCavalryMoved)) return state;
+      if (state.phase === "player-move" && unit.hasMoved) return state;
+
       const key = hexKey(action.hex);
       if (!(key in state.reachable)) return state;
       const tile = state.map[key];
-      const units = { ...state.units, [unit.id]: { ...unit, pos: action.hex, hasMoved: true } };
+      const updated: Unit =
+        state.phase === "player-cavalry-move"
+          ? { ...unit, pos: action.hex, hasCavalryMoved: true }
+          : { ...unit, pos: action.hex, hasMoved: true };
+      const units = { ...state.units, [unit.id]: updated };
       let next: GameState = { ...state, units, selectedUnitId: null, reachable: {} };
       next = recomputeObjectiveControl(next);
       next = addLog(next, `${unitDisplayName(state.playerFaction, unit.kind)} advances to ${tile.objectiveName ?? `${TERRAIN_DEFS[tile.terrain].label} (${action.hex.col}-${action.hex.row})`}.`);
@@ -209,11 +230,15 @@ export function gameReducer(state: GameState, action: Action): GameState {
     }
 
     case "END_PHASE": {
-      if (state.phase === "player-move") {
+      if (state.phase === "player-cavalry-move") {
         return { ...state, phase: "player-combat", selectedUnitId: null, reachable: {} };
       }
 
       if (state.phase === "player-combat") {
+        return { ...state, phase: "player-move", selectedUnitId: null, reachable: {} };
+      }
+
+      if (state.phase === "player-move") {
         const aiAlive = Object.values(state.units).some((u) => u.faction === state.aiFaction);
         if (!aiAlive) return finalizeVictory({ ...state });
 
@@ -227,8 +252,8 @@ export function gameReducer(state: GameState, action: Action): GameState {
         if (nextTurn > next.totalTurns) return finalizeVictory(next);
 
         next = resetFactionFlags(next, next.playerFaction);
-        next = { ...next, turn: nextTurn, phase: "player-move" };
-        next = addLog(next, `Turn ${nextTurn} begins.`, "info");
+        next = { ...next, turn: nextTurn, phase: "player-cavalry-move" };
+        next = addLog(next, `Turn ${nextTurn} begins — cavalry advances first.`, "info");
         return next;
       }
 

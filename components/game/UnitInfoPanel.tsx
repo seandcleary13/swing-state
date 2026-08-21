@@ -10,8 +10,9 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
   if (!unit) {
     return (
       <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3 text-sm text-[#8a7f63]">
-        {state.phase === "player-move" && "Select one of your units to see movement range."}
+        {state.phase === "player-cavalry-move" && "Select one of your Cavalry units to see its movement range."}
         {state.phase === "player-combat" && "Select one of your units to attack an adjacent enemy."}
+        {state.phase === "player-move" && "Select one of your units to see its movement range."}
         {state.phase === "setup" && "Choose a unit from the tray, then place it."}
         {state.phase === "game-over" && "The campaign has ended."}
       </div>
@@ -33,8 +34,9 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
         {tile.objectiveName ? ` — ${tile.objectiveName}` : ""}
       </div>
       <div className="text-xs mt-1 flex gap-2">
-        {unit.hasMoved && <span className="text-[#8a7f63]">Moved</span>}
+        {unit.hasCavalryMoved && <span className="text-[#8a7f63]">Advanced</span>}
         {unit.hasAttacked && <span className="text-[#8a7f63]">Attacked</span>}
+        {unit.hasMoved && <span className="text-[#8a7f63]">Repositioned</span>}
         {unit.routed && <span className="text-[#d5595c]">Disordered</span>}
       </div>
     </div>
