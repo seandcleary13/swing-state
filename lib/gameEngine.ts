@@ -2,12 +2,12 @@ import { hexDistance, hexKey, type HexCoord } from "./hex";
 import { TERRAIN_DEFS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { ORDER_OF_BATTLE, UNIT_TYPES, unitDisplayName } from "./units";
+import { ORDER_OF_BATTLE, UNIT_TYPES, isCavalryKind, unitDisplayName } from "./units";
 import { runAiTurn } from "./ai";
 import type { CombatLogEntry, Faction, GameState, Unit, UnitKind } from "./types";
 
 const COALITION_DEPLOY: Array<[number, number]> = [
-  [9, 1], [8, 2], [9, 4], [8, 5], [9, 7], [8, 8], [9, 10], [8, 11],
+  [12, 1], [11, 2], [12, 4], [11, 5], [12, 7], [11, 8], [12, 10], [11, 11], [12, 12],
 ];
 
 function newId(units: Record<string, Unit>, faction: Faction): string {
@@ -42,18 +42,14 @@ function factionTownCount(state: GameState, faction: Faction): number {
   return Object.values(state.map).filter((t) => t.objective && t.controlledBy === faction).length;
 }
 
-function finalizeVictory(state: GameState): GameState {
-  const p = factionTownCount(state, state.playerFaction);
-  const a = factionTownCount(state, state.aiFaction);
-  let winner: Faction | "draw";
-  if (p > a) winner = state.playerFaction;
-  else if (a > p) winner = state.aiFaction;
-  else {
-    const pUnits = Object.values(state.units).filter((u) => u.faction === state.playerFaction).length;
-    const aUnits = Object.values(state.units).filter((u) => u.faction === state.aiFaction).length;
-    winner = pUnits > aUnits ? state.playerFaction : aUnits > pUnits ? state.aiFaction : "draw";
-  }
-  return { ...state, phase: "game-over", winner };
+// The attacker wins outright by capturing every town — a full breakthrough.
+function attackerHasOverrun(state: GameState): boolean {
+  const totalTowns = Object.values(state.map).filter((t) => t.objective).length;
+  return factionTownCount(state, state.attackerFaction) === totalTowns;
+}
+
+function finalizeVictory(state: GameState, winner: Faction, reason: GameState["victoryReason"]): GameState {
+  return { ...state, phase: "game-over", winner, victoryReason: reason };
 }
 
 function addLog(state: GameState, text: string, kind: CombatLogEntry["kind"] = "info"): GameState {
@@ -63,6 +59,11 @@ function addLog(state: GameState, text: string, kind: CombatLogEntry["kind"] = "
 
 export function initGameState(): GameState {
   const map = buildMap();
+  // The Coalition defends and starts already holding every town.
+  for (const tile of Object.values(map)) {
+    if (tile.objective) tile.controlledBy = "coalition";
+  }
+
   const units: Record<string, Unit> = {};
   ORDER_OF_BATTLE.forEach((kind, i) => {
     const [col, row] = COALITION_DEPLOY[i];
@@ -78,18 +79,21 @@ export function initGameState(): GameState {
     phase: "setup",
     playerFaction: "france",
     aiFaction: "coalition",
+    attackerFaction: "france",
+    defenderFaction: "coalition",
     selectedUnitId: null,
     reachable: {},
     log: [
       {
         id: "start",
         turn: 0,
-        text: "The Coalition army has taken up positions in the east. Deploy the Grande Armée on the western hexes to begin the campaign.",
+        text: "The Coalition holds every town in the region. The Grande Armée must break through and take them all before the campaign's 6 turns run out — deploy on the western hexes to begin.",
         kind: "setup",
       },
     ],
     setupPool: { france: [...ORDER_OF_BATTLE], coalition: [] },
     winner: null,
+    victoryReason: null,
     lastCombat: null,
   };
 }
@@ -138,7 +142,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (!unit || unit.faction !== state.playerFaction) return state;
 
       if (state.phase === "player-cavalry-move") {
-        if (unit.kind !== "cavalry") return state;
+        if (!isCavalryKind(unit.kind)) return state;
         const reachable = !unit.hasCavalryMoved ? computeReachable(state, unit) : {};
         return { ...state, selectedUnitId: action.unitId, reachable };
       }
@@ -155,7 +159,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (state.phase !== "player-cavalry-move" && state.phase !== "player-move") return state;
       const unit = state.units[state.selectedUnitId];
       if (!unit) return state;
-      if (state.phase === "player-cavalry-move" && (unit.kind !== "cavalry" || unit.hasCavalryMoved)) return state;
+      if (state.phase === "player-cavalry-move" && (!isCavalryKind(unit.kind) || unit.hasCavalryMoved)) return state;
       if (state.phase === "player-move" && unit.hasMoved) return state;
 
       const key = hexKey(action.hex);
@@ -169,6 +173,10 @@ export function gameReducer(state: GameState, action: Action): GameState {
       let next: GameState = { ...state, units, selectedUnitId: null, reachable: {} };
       next = recomputeObjectiveControl(next);
       next = addLog(next, `${unitDisplayName(state.playerFaction, unit.kind)} advances to ${tile.objectiveName ?? `${TERRAIN_DEFS[tile.terrain].label} (${action.hex.col}-${action.hex.row})`}.`);
+      if (attackerHasOverrun(next)) {
+        next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
+        return finalizeVictory(next, next.attackerFaction, "overrun");
+      }
       return next;
     }
 
@@ -226,6 +234,14 @@ export function gameReducer(state: GameState, action: Action): GameState {
       let next: GameState = { ...state, units, lastCombat: { attacker: attacker.id, defender: defender.id, odds, roll, result } };
       next = recomputeObjectiveControl(next);
       next = addLog(next, text, "combat");
+      if (!Object.values(next.units).some((u) => u.faction === next.defenderFaction)) {
+        next = addLog(next, "The Coalition army has been annihilated — the Grande Armée overruns the field!", "victory");
+        return finalizeVictory(next, next.attackerFaction, "annihilation-defender");
+      }
+      if (attackerHasOverrun(next)) {
+        next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
+        return finalizeVictory(next, next.attackerFaction, "overrun");
+      }
       return next;
     }
 
@@ -239,17 +255,26 @@ export function gameReducer(state: GameState, action: Action): GameState {
       }
 
       if (state.phase === "player-move") {
-        const aiAlive = Object.values(state.units).some((u) => u.faction === state.aiFaction);
-        if (!aiAlive) return finalizeVictory({ ...state });
+        const defenderAlive = Object.values(state.units).some((u) => u.faction === state.defenderFaction);
+        if (!defenderAlive) {
+          const done = addLog({ ...state }, "The Coalition army has been annihilated — the Grande Armée overruns the field!", "victory");
+          return finalizeVictory(done, state.attackerFaction, "annihilation-defender");
+        }
 
         let next = addLog({ ...state, selectedUnitId: null, reachable: {} }, "— The Coalition responds —", "info");
         next = runAiTurn(next);
 
-        const playerAlive = Object.values(next.units).some((u) => u.faction === next.playerFaction);
-        if (!playerAlive) return finalizeVictory(next);
+        const attackerAlive = Object.values(next.units).some((u) => u.faction === next.attackerFaction);
+        if (!attackerAlive) {
+          next = addLog(next, "The Grande Armée has been wiped out — the Coalition holds the field!", "victory");
+          return finalizeVictory(next, next.defenderFaction, "annihilation-attacker");
+        }
 
         const nextTurn = next.turn + 1;
-        if (nextTurn > next.totalTurns) return finalizeVictory(next);
+        if (nextTurn > next.totalTurns) {
+          next = addLog(next, "The campaign clock runs out — the Coalition has held out!", "victory");
+          return finalizeVictory(next, next.defenderFaction, "held-out");
+        }
 
         next = resetFactionFlags(next, next.playerFaction);
         next = { ...next, turn: nextTurn, phase: "player-cavalry-move" };

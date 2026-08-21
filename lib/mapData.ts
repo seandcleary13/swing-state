@@ -1,7 +1,7 @@
 import type { Faction, HexTile, TerrainDef, TerrainType } from "./types";
 import { hexKey } from "./hex";
 
-export const COLS = 10;
+export const COLS = 13;
 export const ROWS = 14;
 
 export const TERRAIN_DEFS: Record<TerrainType, TerrainDef> = {
@@ -20,19 +20,19 @@ interface TownDef {
 
 export const TOWNS: TownDef[] = [
   { col: 2, row: 3, name: "Rocheval" },
-  { col: 5, row: 2, name: "Saint-Aubry" },
-  { col: 4, row: 7, name: "Hauteclaire" },
-  { col: 6, row: 10, name: "Marbecourt" },
-  { col: 3, row: 11, name: "Vieuxpont" },
+  { col: 6, row: 2, name: "Saint-Aubry" },
+  { col: 6, row: 7, name: "Hauteclaire" },
+  { col: 9, row: 10, name: "Marbecourt" },
+  { col: 4, row: 11, name: "Vieuxpont" },
 ];
 
 const HILL_HEXES: Array<[number, number]> = [
-  [6, 0], [6, 1], [6, 2], [5, 4], [5, 5],
-  [3, 7], [3, 8], [3, 9], [2, 11], [2, 12],
-  [7, 4], [7, 5], [8, 5], [1, 9], [1, 10], [8, 8], [8, 9],
+  [8, 0], [8, 1], [8, 2], [7, 4], [7, 5],
+  [4, 7], [4, 8], [4, 9], [3, 11], [3, 12],
+  [9, 4], [9, 5], [10, 5], [1, 9], [1, 10], [10, 8], [10, 9],
 ];
 
-const MARSH_HEXES: Array<[number, number]> = [[3, 6], [2, 9]];
+const MARSH_HEXES: Array<[number, number]> = [[4, 6], [3, 9]];
 
 const ROAD_ROWS = [2, 7];
 

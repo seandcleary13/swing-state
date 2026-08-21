@@ -27,7 +27,7 @@ export interface HexTile {
   deploymentFor?: Faction;
 }
 
-export type UnitKind = "cavalry" | "infantry" | "artillery";
+export type UnitKind = "cavalry" | "heavy-cavalry" | "infantry" | "artillery";
 
 export interface UnitTypeDef {
   kind: UnitKind;
@@ -63,6 +63,8 @@ export interface CombatLogEntry {
   kind: "info" | "combat" | "victory" | "setup";
 }
 
+export type VictoryReason = "overrun" | "annihilation-defender" | "annihilation-attacker" | "held-out";
+
 export interface GameState {
   map: Record<string, HexTile>;
   units: Record<string, Unit>;
@@ -71,10 +73,14 @@ export interface GameState {
   phase: GamePhase;
   playerFaction: Faction;
   aiFaction: Faction;
+  /** France attacks, Coalition defends. The attacker must capture every town before the turns run out; the defender just has to hold out. */
+  attackerFaction: Faction;
+  defenderFaction: Faction;
   selectedUnitId: string | null;
   reachable: Record<string, number>; // hexKey -> remaining MP cost map for highlight
   log: CombatLogEntry[];
   setupPool: Record<Faction, UnitKind[]>; // remaining units to deploy
   winner: Faction | "draw" | null;
+  victoryReason: VictoryReason | null;
   lastCombat: { attacker: string; defender: string; odds: string; roll: number; result: string } | null;
 }

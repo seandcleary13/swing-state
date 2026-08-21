@@ -35,12 +35,12 @@ export default function TurnBanner({ state, onEndPhase }: { state: GameState; on
         <div className="flex items-center gap-4 text-sm">
           <div className="text-center">
             <div className="font-black text-[#6ea3e8]">{franceTowns}</div>
-            <div className="text-[10px] text-[#8a7f63]">FRANCE</div>
+            <div className="text-[10px] text-[#8a7f63]">FRANCE · ATTACKER</div>
           </div>
-          <div className="text-[#8a7f63]">of {totalTowns} towns</div>
+          <div className="text-[#8a7f63]">of {totalTowns} towns must fall</div>
           <div className="text-center">
             <div className="font-black text-[#d5595c]">{coalitionTowns}</div>
-            <div className="text-[10px] text-[#8a7f63]">COALITION</div>
+            <div className="text-[10px] text-[#8a7f63]">COALITION · DEFENDER</div>
           </div>
         </div>
         {state.phase in PHASE_BUTTON_LABEL && (

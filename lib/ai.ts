@@ -2,8 +2,7 @@ import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { TERRAIN_DEFS } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { UNIT_TYPES } from "./units";
-import { unitDisplayName } from "./units";
+import { UNIT_TYPES, isCavalryKind, unitDisplayName } from "./units";
 import type { CombatLogEntry, Faction, GameState, Unit } from "./types";
 
 function randomInt(min: number, max: number): number {
@@ -27,14 +26,19 @@ function findRetreatHex(state: GameState, defender: Unit, attacker: Unit): HexCo
   return options[0];
 }
 
+// The Coalition defends: it already holds every town, so its priority is retaking any
+// town the attacker has captured. Failing that, it garrisons its own towns rather than
+// chasing the attacker across the map — a defensive posture, not a rush for open ground.
 function nearestTargetDistance(state: GameState, from: HexCoord, aiFaction: Faction): number {
   const playerFaction: Faction = aiFaction === "france" ? "coalition" : "france";
-  const uncontrolledObjectives = Object.values(state.map).filter(
-    (t) => t.objective && t.controlledBy !== aiFaction
-  );
+  const lostObjectives = Object.values(state.map).filter((t) => t.objective && t.controlledBy !== aiFaction);
+  const ownObjectives = Object.values(state.map).filter((t) => t.objective && t.controlledBy === aiFaction);
+
   const targets: HexCoord[] =
-    uncontrolledObjectives.length > 0
-      ? uncontrolledObjectives.map((t) => ({ col: t.col, row: t.row }))
+    lostObjectives.length > 0
+      ? lostObjectives.map((t) => ({ col: t.col, row: t.row }))
+      : ownObjectives.length > 0
+      ? ownObjectives.map((t) => ({ col: t.col, row: t.row }))
       : Object.values(state.units)
           .filter((u) => u.faction === playerFaction)
           .map((u) => u.pos);
@@ -116,7 +120,7 @@ export function runAiTurn(state: GameState): GameState {
   };
 
   // --- Phase 1: cavalry advances alone ---
-  working = advanceUnits(working, aiFaction, playerFaction, (u) => u.kind === "cavalry", "hasCavalryMoved", true);
+  working = advanceUnits(working, aiFaction, playerFaction, (u) => isCavalryKind(u.kind), "hasCavalryMoved", true);
 
   // --- Phase 2: everyone attacks ---
   for (const unit of Object.values(working.units).filter((u) => u.faction === aiFaction)) {

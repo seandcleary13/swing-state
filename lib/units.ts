@@ -2,6 +2,7 @@ import type { UnitKind, UnitTypeDef } from "./types";
 
 export const UNIT_TYPES: Record<UnitKind, UnitTypeDef> = {
   cavalry: { kind: "cavalry", name: "Cavalry", power: 3, movement: 5, symbol: "CAV" },
+  "heavy-cavalry": { kind: "heavy-cavalry", name: "Heavy Cavalry", power: 6, movement: 5, symbol: "HCV" },
   infantry: { kind: "infantry", name: "Infantry", power: 4, movement: 4, symbol: "INF" },
   artillery: { kind: "artillery", name: "Artillery", power: 5, movement: 3, symbol: "ART" },
 };
@@ -9,12 +10,14 @@ export const UNIT_TYPES: Record<UnitKind, UnitTypeDef> = {
 // Faction-flavored display names for the same unit kinds.
 export const FACTION_UNIT_NAMES: Record<"france" | "coalition", Record<UnitKind, string>> = {
   france: {
-    cavalry: "Cuirassiers",
+    cavalry: "Hussars",
+    "heavy-cavalry": "Cuirassiers",
     infantry: "Line Infantry",
     artillery: "Grande Battery",
   },
   coalition: {
-    cavalry: "Dragoons",
+    cavalry: "Uhlans",
+    "heavy-cavalry": "Dragoons",
     infantry: "Line Infantry",
     artillery: "Foot Battery",
   },
@@ -24,7 +27,12 @@ export function unitDisplayName(faction: "france" | "coalition", kind: UnitKind)
   return FACTION_UNIT_NAMES[faction][kind] ?? UNIT_TYPES[kind].name;
 }
 
-// Order of battle for each side — 8 units, small tutorial-scale scenario.
+// Both cavalry kinds get the opening cavalry-only movement phase (and a second move later).
+export function isCavalryKind(kind: UnitKind): boolean {
+  return kind === "cavalry" || kind === "heavy-cavalry";
+}
+
+// Order of battle for each side — 9 units, small tutorial-scale scenario.
 export const ORDER_OF_BATTLE: UnitKind[] = [
   "infantry",
   "infantry",
@@ -32,6 +40,7 @@ export const ORDER_OF_BATTLE: UnitKind[] = [
   "infantry",
   "cavalry",
   "cavalry",
+  "heavy-cavalry",
   "artillery",
   "artillery",
 ];

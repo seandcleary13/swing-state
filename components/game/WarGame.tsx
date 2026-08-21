@@ -4,6 +4,7 @@ import { useMemo, useReducer, useState } from "react";
 import { gameReducer, initGameState } from "@/lib/gameEngine";
 import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
+import { isCavalryKind } from "@/lib/units";
 import type { UnitKind } from "@/lib/types";
 import HexGrid from "./HexGrid";
 import TurnBanner from "./TurnBanner";
@@ -46,7 +47,7 @@ export default function WarGame() {
 
     if (state.phase === "player-cavalry-move") {
       if (occ && occ.faction === state.playerFaction) {
-        dispatch({ type: "SELECT_UNIT", unitId: occ.kind === "cavalry" && !occ.hasCavalryMoved ? occ.id : null });
+        dispatch({ type: "SELECT_UNIT", unitId: isCavalryKind(occ.kind) && !occ.hasCavalryMoved ? occ.id : null });
       } else if (state.selectedUnitId && key in state.reachable) {
         dispatch({ type: "MOVE_UNIT", hex });
       } else {

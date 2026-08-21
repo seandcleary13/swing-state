@@ -2,12 +2,12 @@
 
 const SECTIONS: { title: string; body: string }[] = [
   {
-    title: "🎯 Objective",
-    body: "Control more of the 5 towns than the Coalition by the end of Turn 6. A town is controlled by whichever side's unit last stood on it. If both sides hold the same number of towns, whoever has more surviving units wins; a full tie is a draw.",
+    title: "🎯 Objective — Attacker vs. Defender",
+    body: "France is the Attacker; the Coalition is the Defender and starts the campaign already holding all 5 towns. France must capture every single town before Turn 6 ends, or wipe out the Coalition army outright — either one is an immediate breakthrough. The Coalition doesn't need to retake anything: if it still holds even one town when the clock runs out (or if France's army is destroyed first), the Coalition has held out and wins.",
   },
   {
     title: "🪖 Deployment",
-    body: "Place your 8 units on the highlighted western hexes before Turn 1. Choose a unit from the tray, then click a deployment hex. Once all 8 are placed, the campaign begins.",
+    body: "Place your 9 units on the highlighted western hexes before Turn 1. Choose a unit from the tray, then click a deployment hex. Once all 9 are placed, the campaign begins — the Coalition is already dug in across the map to the east.",
   },
   {
     title: "🐎 1. Cavalry Moves",
@@ -27,7 +27,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🧭 Unit Types",
-    body: "Each unit's numbers read Power-Movement. Cavalry (3 Power / 5 Movement) are the fastest unit on the field — they screen ahead, then strike and reposition. Infantry (4 Power / 4 Movement) are the balanced backbone of the army. Artillery (5 Power / 3 Movement) hits hardest but is slow to reposition.",
+    body: "Each unit's numbers read Power-Movement. Cavalry (3 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (6 Power / 5 Movement) hit just as hard as Artillery but keep Cavalry's speed and get the two-move cavalry phases — a battering ram for the Attacker. Infantry (4 Power / 4 Movement) are the balanced backbone of the army. Artillery (5 Power / 3 Movement) hits hard but is slow to reposition.",
   },
 ];
 

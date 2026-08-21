@@ -2,7 +2,7 @@
 
 import { hexCenter, hexCorners, hexKey, hexNeighbors, type HexCoord } from "@/lib/hex";
 import { COLS, ROWS, TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES } from "@/lib/units";
+import { UNIT_TYPES, isCavalryKind } from "@/lib/units";
 import type { Faction, GameState, Unit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -123,7 +123,7 @@ export default function HexGrid({ state, onHexClick, attackableIds }: Props) {
         const isAttackable = attackableIds.has(unit.id);
         const isPlayer = unit.faction === playerFaction;
         const dimmed =
-          (phase === "player-cavalry-move" && isPlayer && (unit.kind !== "cavalry" || unit.hasCavalryMoved)) ||
+          (phase === "player-cavalry-move" && isPlayer && (!isCavalryKind(unit.kind) || unit.hasCavalryMoved)) ||
           (phase === "player-combat" && isPlayer && unit.hasAttacked) ||
           (phase === "player-move" && isPlayer && unit.hasMoved);
 
