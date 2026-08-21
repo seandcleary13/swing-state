@@ -3,7 +3,7 @@ import { TERRAIN_DEFS } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat } from "./retreat";
-import { UNIT_TYPES, attackRange, isCavalryKind, unitDisplayName } from "./units";
+import { UNIT_TYPES, attackRange, defensePower, isCavalryKind, unitDisplayName } from "./units";
 import type { CombatLogEntry, Faction, GameState, Unit } from "./types";
 
 const RETREAT_HEXES = 2;
@@ -12,9 +12,9 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function terrainBonus(state: GameState, pos: HexCoord): number {
+function terrainMultiplier(state: GameState, pos: HexCoord): number {
   const tile = state.map[hexKey(pos)];
-  return tile ? TERRAIN_DEFS[tile.terrain].defenseBonus : 0;
+  return tile ? TERRAIN_DEFS[tile.terrain].defenseMultiplier : 1;
 }
 
 function isOnHill(state: GameState, pos: HexCoord): boolean {
@@ -69,7 +69,7 @@ function advanceUnits(
         .filter((u): u is Unit => !!u && u.faction === playerFaction);
       const goodFight = adjEnemies.some((e) => {
         const atk = UNIT_TYPES[live.kind].power;
-        const def = UNIT_TYPES[e.kind].power + terrainBonus(working, e.pos);
+        const def = defensePower(UNIT_TYPES[e.kind].power, terrainMultiplier(working, e.pos));
         return atk / Math.max(def, 0.5) >= 1;
       });
       if (goodFight) continue; // stay and fight this combat phase
@@ -131,41 +131,70 @@ export function runAiTurn(state: GameState): GameState {
     let bestRatio = -Infinity;
     for (const t of targets) {
       const atk = UNIT_TYPES[live.kind].power;
-      const def = UNIT_TYPES[t.kind].power + terrainBonus(working, t.pos);
+      const def = defensePower(UNIT_TYPES[t.kind].power, terrainMultiplier(working, t.pos));
       const ratio = atk / Math.max(def, 0.5);
       if (ratio > bestRatio) {
         bestRatio = ratio;
         bestTarget = t;
       }
     }
-    if (!bestTarget || bestRatio < 1) continue;
+    // Mandatory attack: any unit with a live target in range must fight, even at bad odds —
+    // it just picks its best available odds rather than skipping the fight entirely.
+    if (!bestTarget) continue;
 
     const attackerName = unitDisplayName(aiFaction, live.kind);
     const defenderName = unitDisplayName(playerFaction, bestTarget.kind);
     const atk = UNIT_TYPES[live.kind].power;
-    const def = UNIT_TYPES[bestTarget.kind].power + terrainBonus(working, bestTarget.pos);
+    const def = defensePower(UNIT_TYPES[bestTarget.kind].power, terrainMultiplier(working, bestTarget.pos));
     const roll = randomInt(1, 6);
     const { odds, result } = rollCombat(atk, def, roll);
     working = { ...working, lastCombat: { attackers: [live.id], defender: bestTarget.id, odds, roll, result } };
     const wasAdjacent = hexDistance(live.pos, bestTarget.pos) === 1;
     const vacatedPos = bestTarget.pos;
+    // Bombarding artillery (firing from beyond adjacency) never suffers combat results itself.
+    const bombarding = !wasAdjacent;
 
     if (result === "NE") {
       addLog(`${attackerName} attacks ${defenderName} at ${odds} — no effect (roll ${roll}).`, "combat");
     } else if (result === "AE") {
-      const { [live.id]: _drop, ...rest } = working.units;
-      working = { ...working, units: rest };
-      addLog(`${attackerName} attacks ${defenderName} at ${odds} — attacker eliminated (roll ${roll}).`, "combat");
-      continue;
+      if (bombarding) {
+        addLog(`${attackerName} bombards ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`, "combat");
+      } else {
+        const { [live.id]: _drop, ...rest } = working.units;
+        working = { ...working, units: rest };
+        addLog(`${attackerName} attacks ${defenderName} at ${odds} — attacker eliminated (roll ${roll}).`, "combat");
+        continue;
+      }
+    } else if (result === "Ar") {
+      if (bombarding) {
+        addLog(`${attackerName} bombards ${defenderName} at ${odds} — no effect (roll ${roll}).`, "combat");
+      } else {
+        const retreat = computeRetreat(working, live.pos, [bestTarget.pos], RETREAT_HEXES);
+        if (retreat) {
+          working.units[live.id] = { ...live, pos: retreat };
+          addLog(`${attackerName} attacks ${defenderName} at ${odds} — attacker falls back (roll ${roll}).`, "combat");
+        } else {
+          const { [live.id]: _drop, ...rest } = working.units;
+          working = { ...working, units: rest };
+          addLog(`${attackerName} attacks ${defenderName} at ${odds} — no room to retreat, attacker eliminated (roll ${roll}).`, "combat");
+          continue;
+        }
+      }
     } else if (result === "DE") {
       const { [bestTarget.id]: _drop, ...rest } = working.units;
       working = { ...working, units: rest };
       addLog(`${attackerName} attacks ${defenderName} at ${odds} — defender eliminated (roll ${roll}).`, "combat");
     } else if (result === "EX") {
-      const { [live.id]: _d1, [bestTarget.id]: _d2, ...rest } = working.units;
+      const { [bestTarget.id]: _drop, ...rest } = working.units;
       working = { ...working, units: rest };
-      addLog(`${attackerName} and ${defenderName} clash at ${odds} — both eliminated (roll ${roll}).`, "combat");
-      continue;
+      if (bombarding) {
+        addLog(`${attackerName} bombards ${defenderName} at ${odds} — defender eliminated (roll ${roll}).`, "combat");
+      } else {
+        const { [live.id]: _d1, ...rest2 } = working.units;
+        working = { ...working, units: rest2 };
+        addLog(`${attackerName} and ${defenderName} clash at ${odds} — both eliminated (roll ${roll}).`, "combat");
+        continue;
+      }
     } else if (result === "DR") {
       const retreat = computeRetreat(working, bestTarget.pos, [live.pos], RETREAT_HEXES);
       if (retreat) {

@@ -5,11 +5,11 @@ export const COLS = 13;
 export const ROWS = 14;
 
 export const TERRAIN_DEFS: Record<TerrainType, TerrainDef> = {
-  clear: { moveCost: 1, defenseBonus: 0, label: "Open Field" },
-  forest: { moveCost: 2, defenseBonus: 2, label: "Forest" },
-  hill: { moveCost: 2, defenseBonus: 2, label: "Hill" },
-  town: { moveCost: 1, defenseBonus: 2, label: "Village" },
-  marsh: { moveCost: 3, defenseBonus: 1, label: "Marsh" },
+  clear: { moveCost: 1, defenseMultiplier: 1, label: "Open Field" },
+  forest: { moveCost: 2, defenseMultiplier: 2, label: "Forest" },
+  hill: { moveCost: 2, defenseMultiplier: 2, label: "Hill" },
+  town: { moveCost: 1, defenseMultiplier: 2, label: "Village" },
+  marsh: { moveCost: 3, defenseMultiplier: 1.5, label: "Marsh" },
 };
 
 interface TownDef {

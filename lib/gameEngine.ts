@@ -2,10 +2,10 @@ import { hexDistance, hexKey, type HexCoord } from "./hex";
 import { TERRAIN_DEFS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { computeRetreat } from "./retreat";
-import { ORDER_OF_BATTLE, UNIT_TYPES, attackRange, isCavalryKind, unitDisplayName } from "./units";
+import { computeRetreat, retreatStepOptions } from "./retreat";
+import { ORDER_OF_BATTLE, UNIT_TYPES, attackRange, defensePower, isCavalryKind, unitDisplayName } from "./units";
 import { runAiTurn } from "./ai";
-import type { CombatLogEntry, Faction, GameState, Unit, UnitKind } from "./types";
+import type { CombatLogEntry, Faction, GameState, PendingRetreat, Unit, UnitKind } from "./types";
 
 const COALITION_DEPLOY: Array<[number, number]> = [
   [12, 1], [11, 2], [12, 4], [11, 5], [12, 7], [11, 8], [12, 10], [11, 11], [12, 12],
@@ -28,9 +28,64 @@ function newId(units: Record<string, Unit>, faction: Faction): string {
   return `${faction}-${n}`;
 }
 
-function terrainBonus(state: GameState, pos: HexCoord): number {
+function terrainMultiplier(state: GameState, pos: HexCoord): number {
   const tile = state.map[hexKey(pos)];
-  return tile ? TERRAIN_DEFS[tile.terrain].defenseBonus : 0;
+  return tile ? TERRAIN_DEFS[tile.terrain].defenseMultiplier : 1;
+}
+
+/** Player units with a live enemy in range that haven't attacked yet — mandatory-attack obligations. */
+export function getObligatedAttackerIds(state: GameState): Set<string> {
+  const set = new Set<string>();
+  if (state.phase !== "player-combat") return set;
+  const enemies = Object.values(state.units).filter((u) => u.faction === state.aiFaction);
+  for (const u of Object.values(state.units)) {
+    if (u.faction !== state.playerFaction || u.hasAttacked || u.routed) continue;
+    const range = attackRange(u.kind, isOnHill(state, u.pos));
+    if (enemies.some((e) => hexDistance(u.pos, e.pos) <= range)) set.add(u.id);
+  }
+  return set;
+}
+
+/**
+ * Pops units off `queue` one at a time, auto-eliminating any with nowhere at all to
+ * retreat to, until it finds one with real options (left as the active `pendingRetreat`)
+ * or the queue runs out (retreat sequence finished, `pendingRetreat` cleared).
+ */
+function beginRetreats(state: GameState, unitIds: string[], awayFrom: HexCoord): GameState {
+  let working = state;
+  const queue = [...unitIds];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const unit = working.units[id];
+    if (!unit) continue;
+    const options = retreatStepOptions(working, unit.pos, awayFrom);
+    if (!options.length) {
+      const { [id]: _drop, ...rest } = working.units;
+      working = addLog(
+        { ...working, units: rest },
+        `${unitDisplayName(working.playerFaction, unit.kind)} has nowhere to fall back and is eliminated.`,
+        "combat"
+      );
+      continue;
+    }
+    const retreatOptions: Record<string, true> = {};
+    for (const o of options) retreatOptions[hexKey(o)] = true;
+    return { ...working, pendingRetreat: { unitId: id, awayFrom, stepsTaken: 0, queue }, retreatOptions };
+  }
+  return { ...working, pendingRetreat: null, retreatOptions: {} };
+}
+
+function finalizeCombatOutcome(state: GameState): GameState {
+  let next = recomputeObjectiveControl(state);
+  if (!Object.values(next.units).some((u) => u.faction === next.defenderFaction)) {
+    next = addLog(next, "The Coalition army has been annihilated — the Grande Armée overruns the field!", "victory");
+    return finalizeVictory(next, next.attackerFaction, "annihilation-defender");
+  }
+  if (attackerHasOverrun(next)) {
+    next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
+    return finalizeVictory(next, next.attackerFaction, "overrun");
+  }
+  return next;
 }
 
 function recomputeObjectiveControl(state: GameState): GameState {
@@ -98,6 +153,8 @@ export function initGameState(): GameState {
     reachable: {},
     combatTargetId: null,
     combatAttackerIds: [],
+    pendingRetreat: null,
+    retreatOptions: {},
     log: [
       {
         id: "start",
@@ -120,10 +177,15 @@ export type Action =
   | { type: "SELECT_ATTACK_TARGET"; targetId: string }
   | { type: "CLEAR_ATTACK" }
   | { type: "CONFIRM_ATTACK" }
+  | { type: "CHOOSE_RETREAT_HEX"; hex: HexCoord }
   | { type: "END_PHASE" }
   | { type: "RESET" };
 
 export function gameReducer(state: GameState, action: Action): GameState {
+  // While an attacker retreat is being interactively resolved, every other action is
+  // blocked until the player finishes choosing where those units fall back to.
+  if (state.pendingRetreat && action.type !== "CHOOSE_RETREAT_HEX" && action.type !== "RESET") return state;
+
   switch (action.type) {
     case "RESET":
       return initGameState();
@@ -230,43 +292,47 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (defender.faction !== state.aiFaction) return state;
 
       const atk = attackers.reduce((sum, u) => sum + UNIT_TYPES[u.kind].power, 0);
-      const def = UNIT_TYPES[defender.kind].power + terrainBonus(state, defender.pos);
+      const def = defensePower(UNIT_TYPES[defender.kind].power, terrainMultiplier(state, defender.pos));
       const roll = Math.floor(Math.random() * 6) + 1;
       const { odds, result } = rollCombat(atk, def, roll);
       const attackerNames = joinNames(attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)));
       const defenderName = unitDisplayName(state.aiFaction, defender.kind);
+      // Artillery firing from beyond adjacency ("bombarding") never suffers combat results itself.
+      const adjacentAttackers = attackers.filter((a) => hexDistance(a.pos, defender.pos) === 1);
+      const bombardingOnly = adjacentAttackers.length === 0;
 
       let units = { ...state.units };
-      let text = "";
-      const markAttacked = () => {
-        for (const a of attackers) units[a.id] = { ...units[a.id], hasAttacked: true };
-      };
+      for (const a of attackers) units[a.id] = { ...units[a.id], hasAttacked: true };
 
+      let text = "";
       if (result === "NE") {
-        markAttacked();
         text = `${attackerNames} attack ${defenderName} at ${odds} — no effect (roll ${roll}).`;
       } else if (result === "AE") {
-        for (const a of attackers) delete units[a.id];
-        text = `${attackerNames} attack ${defenderName} at ${odds} — repulsed and eliminated (roll ${roll}).`;
+        if (bombardingOnly) {
+          text = `${attackerNames} bombard ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`;
+        } else {
+          for (const a of adjacentAttackers) delete units[a.id];
+          text = `${attackerNames} attack ${defenderName} at ${odds} — repulsed and eliminated (roll ${roll}).`;
+        }
       } else if (result === "DE") {
         delete units[defender.id];
-        markAttacked();
         text = `${attackerNames} attack ${defenderName} at ${odds} — enemy eliminated (roll ${roll})!`;
       } else if (result === "EX") {
         delete units[defender.id];
-        const weakest = [...attackers].sort((a, b) => UNIT_TYPES[a.kind].power - UNIT_TYPES[b.kind].power)[0];
-        delete units[weakest.id];
-        for (const a of attackers) if (a.id !== weakest.id) units[a.id] = { ...units[a.id], hasAttacked: true };
-        text = `${attackerNames} clash with ${defenderName} at ${odds} — both sides lose a unit (roll ${roll}).`;
+        if (bombardingOnly) {
+          text = `${attackerNames} bombard ${defenderName} at ${odds} — enemy eliminated (roll ${roll}).`;
+        } else {
+          const weakest = [...adjacentAttackers].sort((a, b) => UNIT_TYPES[a.kind].power - UNIT_TYPES[b.kind].power)[0];
+          delete units[weakest.id];
+          text = `${attackerNames} clash with ${defenderName} at ${odds} — both sides lose a unit (roll ${roll}).`;
+        }
       } else if (result === "DR") {
         const vacatedPos = defender.pos;
         const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), RETREAT_HEXES);
-        markAttacked();
         if (retreat) {
           units[defender.id] = { ...defender, pos: retreat, routed: true };
-          const adjacent = attackers.filter((a) => hexDistance(a.pos, vacatedPos) === 1);
-          if (adjacent.length) {
-            const lead = adjacent.sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power)[0];
+          if (adjacentAttackers.length) {
+            const lead = [...adjacentAttackers].sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power)[0];
             units[lead.id] = { ...units[lead.id], pos: vacatedPos };
           }
           text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
@@ -274,6 +340,10 @@ export function gameReducer(state: GameState, action: Action): GameState {
           delete units[defender.id];
           text = `${attackerNames} attack ${defenderName} at ${odds} — no room to retreat, enemy eliminated (roll ${roll}).`;
         }
+      } else if (result === "Ar") {
+        text = bombardingOnly
+          ? `${attackerNames} bombard ${defenderName} at ${odds} — no effect (roll ${roll}).`
+          : `${attackerNames} attack ${defenderName} at ${odds} — repulsed and falling back (roll ${roll}).`;
       }
 
       let next: GameState = {
@@ -283,17 +353,39 @@ export function gameReducer(state: GameState, action: Action): GameState {
         combatAttackerIds: [],
         lastCombat: { attackers: attackers.map((a) => a.id), defender: defender.id, odds, roll, result },
       };
-      next = recomputeObjectiveControl(next);
       next = addLog(next, text, "combat");
-      if (!Object.values(next.units).some((u) => u.faction === next.defenderFaction)) {
-        next = addLog(next, "The Coalition army has been annihilated — the Grande Armée overruns the field!", "victory");
-        return finalizeVictory(next, next.attackerFaction, "annihilation-defender");
+
+      if (result === "Ar" && !bombardingOnly) {
+        next = beginRetreats(next, adjacentAttackers.map((a) => a.id), defender.pos);
+        return next.pendingRetreat ? next : finalizeCombatOutcome(next);
       }
-      if (attackerHasOverrun(next)) {
-        next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
-        return finalizeVictory(next, next.attackerFaction, "overrun");
+      return finalizeCombatOutcome(next);
+    }
+
+    case "CHOOSE_RETREAT_HEX": {
+      if (!state.pendingRetreat) return state;
+      const { unitId, awayFrom, stepsTaken, queue } = state.pendingRetreat;
+      const key = hexKey(action.hex);
+      if (!(key in state.retreatOptions)) return state;
+      const unit = state.units[unitId];
+      if (!unit) return state;
+
+      const units = { ...state.units, [unitId]: { ...unit, pos: action.hex, routed: true } };
+      let next: GameState = { ...state, units };
+      next = addLog(next, `${unitDisplayName(next.playerFaction, unit.kind)} falls back.`, "combat");
+
+      const stepsSoFar = stepsTaken + 1;
+      if (stepsSoFar < RETREAT_HEXES) {
+        const moreOptions = retreatStepOptions(next, action.hex, awayFrom);
+        if (moreOptions.length) {
+          const retreatOptions: Record<string, true> = {};
+          for (const o of moreOptions) retreatOptions[hexKey(o)] = true;
+          return { ...next, pendingRetreat: { unitId, awayFrom, stepsTaken: stepsSoFar, queue }, retreatOptions };
+        }
       }
-      return next;
+
+      next = beginRetreats(next, queue, awayFrom);
+      return next.pendingRetreat ? next : finalizeCombatOutcome(next);
     }
 
     case "END_PHASE": {
@@ -302,6 +394,15 @@ export function gameReducer(state: GameState, action: Action): GameState {
       }
 
       if (state.phase === "player-combat") {
+        const obligated = getObligatedAttackerIds(state);
+        if (obligated.size > 0) {
+          const plural = obligated.size > 1;
+          return addLog(
+            state,
+            `${obligated.size} unit${plural ? "s" : ""} ${plural ? "have" : "has"} an enemy in range and must attack before this phase can end.`,
+            "info"
+          );
+        }
         return { ...state, phase: "player-move", selectedUnitId: null, reachable: {}, combatTargetId: null, combatAttackerIds: [] };
       }
 

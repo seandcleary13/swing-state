@@ -11,7 +11,7 @@ export type TerrainType =
 
 export interface TerrainDef {
   moveCost: number;
-  defenseBonus: number; // added to defender's strength when attacked in this terrain
+  defenseMultiplier: number; // defender's Power is multiplied by this when attacked in this terrain
   label: string;
 }
 
@@ -65,6 +65,14 @@ export interface CombatLogEntry {
 
 export type VictoryReason = "overrun" | "annihilation-defender" | "annihilation-attacker" | "held-out";
 
+/** An attacker-retreat in progress: the player is choosing hexes, one unit at a time. */
+export interface PendingRetreat {
+  unitId: string;
+  awayFrom: HexCoord;
+  stepsTaken: number;
+  queue: string[]; // remaining unit ids that still need to retreat after this one
+}
+
 export interface GameState {
   map: Record<string, HexTile>;
   units: Record<string, Unit>;
@@ -81,6 +89,9 @@ export interface GameState {
   /** Combined-attack staging: an enemy targeted this combat phase, and the player units committed against it. */
   combatTargetId: string | null;
   combatAttackerIds: string[];
+  /** Interactive attacker-retreat: set while the player is choosing where their falling-back units go. */
+  pendingRetreat: PendingRetreat | null;
+  retreatOptions: Record<string, true>;
   log: CombatLogEntry[];
   setupPool: Record<Faction, UnitKind[]>; // remaining units to deploy
   winner: Faction | "draw" | null;

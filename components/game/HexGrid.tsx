@@ -26,10 +26,12 @@ interface Props {
   attackableIds: Set<string>;
   /** Player units in range of the currently-targeted enemy, available to add to the attack. */
   eligibleAttackerIds: Set<string>;
+  /** Player units with a live enemy in range that haven't attacked yet — must fight this phase. */
+  obligatedAttackerIds: Set<string>;
 }
 
-export default function HexGrid({ state, onHexClick, attackableIds, eligibleAttackerIds }: Props) {
-  const { map, units, selectedUnitId, reachable, phase, playerFaction } = state;
+export default function HexGrid({ state, onHexClick, attackableIds, eligibleAttackerIds, obligatedAttackerIds }: Props) {
+  const { map, units, selectedUnitId, reachable, retreatOptions, phase, playerFaction } = state;
   const width = COLS * 51 + 60;
   const height = ROWS * 59 + 90;
 
@@ -63,11 +65,12 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
         const { x, y } = hexCenter(hex);
         const points = hexCorners(x, y);
         const isReachable = key in reachable;
+        const isRetreatOption = key in retreatOptions;
         const unit = unitByHex.get(key);
         const deployHighlight = phase === "setup" && tile.deploymentFor === "france" && !unit;
 
         return (
-          <g key={key} data-hex={key} data-deploy={tile.deploymentFor ?? ""} onClick={() => onHexClick(hex)} className="cursor-pointer">
+          <g key={key} data-hex={key} data-deploy={tile.deploymentFor ?? ""} data-retreat-option={isRetreatOption || undefined} onClick={() => onHexClick(hex)} className="cursor-pointer">
             <polygon
               points={points}
               fill={TERRAIN_FILL[tile.terrain]}
@@ -84,6 +87,7 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
             )}
             {deployHighlight && <polygon points={points} fill="#f4d35e" opacity={0.28} />}
             {isReachable && <polygon points={points} fill="#f4d35e" opacity={0.35} stroke="#f4d35e" strokeWidth={1.5} />}
+            {isRetreatOption && <polygon points={points} fill="#ff8c42" opacity={0.4} stroke="#ff8c42" strokeWidth={1.5} />}
             {tile.terrain === "forest" && (
               <text x={x} y={y + 4} textAnchor="middle" fontSize={14} opacity={0.8}>
                 🌲
@@ -127,6 +131,8 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
         const isTarget = state.combatTargetId === unit.id;
         const isCommitted = state.combatAttackerIds.includes(unit.id);
         const isEligible = eligibleAttackerIds.has(unit.id);
+        const isObligated = obligatedAttackerIds.has(unit.id);
+        const isRetreating = state.pendingRetreat?.unitId === unit.id;
         const isPlayer = unit.faction === playerFaction;
         const dimmed =
           (phase === "player-cavalry-move" && isPlayer && (!isCavalryKind(unit.kind) || unit.hasCavalryMoved)) ||
@@ -136,7 +142,10 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
         let stroke = "#1a1608";
         let strokeWidth = 1.4;
         let dash: string | undefined = unit.routed ? "3 2" : undefined;
-        if (isTarget) {
+        if (isRetreating) {
+          stroke = "#ff8c42";
+          strokeWidth = 4;
+        } else if (isTarget) {
           stroke = "#ff6b6b";
           strokeWidth = 4;
         } else if (isCommitted) {
@@ -149,13 +158,17 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
           stroke = "#ece2c8";
           strokeWidth = 2;
           dash = "2 2";
+        } else if (isObligated) {
+          stroke = "#ff6b6b";
+          strokeWidth = 2.5;
+          dash = "4 2";
         } else if (isTargetable) {
           stroke = "#ff6b6b";
           strokeWidth = 2;
         }
 
         return (
-          <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
+          <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} data-obligated={isObligated || undefined} data-retreating={isRetreating || undefined} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
             <rect
               x={x - 19}
               y={y - 17}

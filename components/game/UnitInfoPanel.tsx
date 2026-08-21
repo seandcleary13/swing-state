@@ -33,6 +33,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
       <div className="text-xs text-[#8a7f63]">
         On {TERRAIN_DEFS[tile.terrain].label}
         {tile.objectiveName ? ` — ${tile.objectiveName}` : ""}
+        {TERRAIN_DEFS[tile.terrain].defenseMultiplier > 1 ? ` (defense ×${TERRAIN_DEFS[tile.terrain].defenseMultiplier})` : ""}
       </div>
       <div className="text-xs mt-1 flex gap-2">
         {unit.hasCavalryMoved && <span className="text-[#8a7f63]">Advanced</span>}

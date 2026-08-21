@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useReducer, useState } from "react";
-import { gameReducer, initGameState } from "@/lib/gameEngine";
+import { gameReducer, getObligatedAttackerIds, initGameState } from "@/lib/gameEngine";
 import { hexDistance, hexKey, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
 import { attackRange, isCavalryKind } from "@/lib/units";
@@ -12,6 +12,7 @@ import SetupTray from "./SetupTray";
 import UnitInfoPanel from "./UnitInfoPanel";
 import CombatLog from "./CombatLog";
 import CombatPreview from "./CombatPreview";
+import RetreatPrompt from "./RetreatPrompt";
 import VictoryModal from "./VictoryModal";
 import RulesPanel from "./RulesPanel";
 import { cn } from "@/lib/utils";
@@ -50,10 +51,18 @@ export default function WarGame() {
     return set;
   }, [state]);
 
+  // Units with a live enemy in range that haven't attacked yet — must fight before the phase can end.
+  const obligatedAttackerIds = useMemo(() => getObligatedAttackerIds(state), [state]);
+
   function handleHexClick(hex: HexCoord) {
     const key = hexKey(hex);
     const tile = state.map[key];
     const occ = unitAt(state.units, hex);
+
+    if (state.pendingRetreat) {
+      if (key in state.retreatOptions) dispatch({ type: "CHOOSE_RETREAT_HEX", hex });
+      return;
+    }
 
     if (state.phase === "setup") {
       if (pendingKind && tile?.deploymentFor === "france" && !occ) {
@@ -131,13 +140,16 @@ export default function WarGame() {
               <SetupTray pool={state.setupPool.france} pending={pendingKind} onSelect={setPendingKind} />
             )}
 
-            {state.phase === "player-combat" && (
-              <CombatPreview
-                state={state}
-                onConfirm={() => dispatch({ type: "CONFIRM_ATTACK" })}
-                onClear={() => dispatch({ type: "CLEAR_ATTACK" })}
-              />
-            )}
+            {state.phase === "player-combat" &&
+              (state.pendingRetreat ? (
+                <RetreatPrompt state={state} />
+              ) : (
+                <CombatPreview
+                  state={state}
+                  onConfirm={() => dispatch({ type: "CONFIRM_ATTACK" })}
+                  onClear={() => dispatch({ type: "CLEAR_ATTACK" })}
+                />
+              ))}
 
             <div className="rounded-lg border border-[#3a2f1c] bg-[#0f0c07] p-2">
               <HexGrid
@@ -145,6 +157,7 @@ export default function WarGame() {
                 onHexClick={handleHexClick}
                 attackableIds={targetableEnemyIds}
                 eligibleAttackerIds={eligibleAttackerIds}
+                obligatedAttackerIds={obligatedAttackerIds}
               />
             </div>
 

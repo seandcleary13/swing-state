@@ -39,3 +39,18 @@ export function computeRetreat(
 
   return advanced ? current : null;
 }
+
+/**
+ * Every legal single-hop retreat destination from `currentPos`, away from `awayFrom`.
+ * Used to let a player choose their own retreat direction one hop at a time,
+ * rather than the engine picking automatically.
+ */
+export function retreatStepOptions(state: GameState, currentPos: HexCoord, awayFrom: HexCoord): HexCoord[] {
+  const currentDist = hexDistance(currentPos, awayFrom);
+  return hexNeighbors(currentPos).filter((n) => {
+    const tile = state.map[hexKey(n)];
+    if (!tile) return false;
+    if (unitAt(state.units, n)) return false;
+    return hexDistance(n, awayFrom) > currentDist;
+  });
+}

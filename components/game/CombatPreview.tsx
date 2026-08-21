@@ -1,14 +1,14 @@
 "use client";
 
-import { hexKey } from "@/lib/hex";
+import { hexDistance, hexKey } from "@/lib/hex";
 import { oddsColumnFor } from "@/lib/combat";
 import { TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES, unitDisplayName } from "@/lib/units";
+import { UNIT_TYPES, defensePower, unitDisplayName } from "@/lib/units";
 import type { GameState } from "@/lib/types";
 
-function terrainDefenseBonus(state: GameState, pos: { col: number; row: number }): number {
+function terrainMultiplier(state: GameState, pos: { col: number; row: number }): number {
   const tile = state.map[hexKey(pos)];
-  return tile ? TERRAIN_DEFS[tile.terrain].defenseBonus : 0;
+  return tile ? TERRAIN_DEFS[tile.terrain].defenseMultiplier : 1;
 }
 
 export default function CombatPreview({
@@ -32,7 +32,8 @@ export default function CombatPreview({
   if (!target) return null;
   const attackers = state.combatAttackerIds.map((id) => state.units[id]).filter(Boolean);
   const targetName = unitDisplayName(state.aiFaction, target.kind);
-  const defPower = UNIT_TYPES[target.kind].power + terrainDefenseBonus(state, target.pos);
+  const defPower = defensePower(UNIT_TYPES[target.kind].power, terrainMultiplier(state, target.pos));
+  const bombardingOnly = attackers.length > 0 && attackers.every((u) => hexDistance(u.pos, target.pos) > 1);
 
   if (!attackers.length) {
     return (
@@ -57,6 +58,7 @@ export default function CombatPreview({
         <span className="text-[#f4d35e] font-bold">{names}</span> ({atkPower} power) vs.{" "}
         <span className="text-[#d5595c] font-bold">{targetName}</span> ({defPower} power) — Odds{" "}
         <span className="font-black text-[#f4d35e]">{odds}</span>
+        {bombardingOnly && <span className="text-[#8a7f63]"> (bombarding — can't be eliminated or forced back by this attack)</span>}
       </div>
       <div className="flex items-center gap-3">
         <button onClick={onClear} className="text-xs text-[#8a7f63] hover:text-[#cbbf9c] transition">

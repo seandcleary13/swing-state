@@ -15,11 +15,15 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "⚔ 2. Announce Attacks",
-    body: "Click an enemy unit to target it, then click any of your own units within range to commit them — you can pile on several units against one target before rolling. Their Power adds together. A preview shows the combined odds; click Attack to confirm and roll. Every unit can attack an adjacent enemy; Artillery can also fire from 2 hexes away, or 3 if it's standing on a hill. Each unit has a single Power value that works as both its attack and its defense, plus a terrain bonus for the defender if it's on a hill, in a forest, or in a town.",
+    body: "Any unit with a live enemy in range must attack this phase — that's mandatory, not optional. Click an enemy unit to target it, then click any of your own units within range to commit them — pile on several units against one target if you like, their Power adds together. A preview shows the combined odds; click Attack to confirm and roll. Every unit can attack an adjacent enemy; Artillery can also fire from 2 hexes away, or 3 if it's standing on a hill. Units still owing an attack are marked with a dashed red outline, and the phase won't end until every one of them has fought.",
   },
   {
     title: "🎲 Combat Results Table",
-    body: "A die is rolled against the combined odds: Attacker(s) Eliminated, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Retreats are the most common outcome — the table favors the defender slightly, so even good odds often just push the defender back rather than destroying it. A defender that retreats falls back 2 hexes; if it has nowhere to go, it's eliminated instead. When a defender retreats, one of the attacking units that was directly adjacent to it (the strongest one, if more than one qualifies) advances into the ground it just vacated.",
+    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out. Any retreat covers 2 hexes; if there's nowhere to go, the unit is eliminated instead. When YOUR units are forced to retreat, you choose the direction yourself, one hex at a time. When a defender retreats, the strongest attacking unit that was directly adjacent to it advances into the ground it just vacated.",
+  },
+  {
+    title: "🎯 Bombarding Artillery",
+    body: "Artillery firing from 2+ hexes away (not adjacent) is never eliminated, traded away in an Exchange, or forced to retreat by its own attack — only the target is at risk. Artillery fighting from an adjacent hex is treated like any other unit and takes its full share of the result.",
   },
   {
     title: "🚶 3. All Units Move",
@@ -27,7 +31,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🗺 Terrain",
-    body: "Open Field: no penalty. Forest & Hill: +2 defense bonus, costs 2 movement points to enter. Town: +2 defense bonus, an objective. Marsh: +1 defense bonus, costs 3 movement points.",
+    body: "Terrain multiplies a defender's Power rather than adding a flat bonus, so it rewards your strongest units the most. Open Field: no change (×1). Forest, Hill & Town: defense ×2. Marsh: defense ×1.5. Forest & Hill cost 2 movement points to enter, Marsh costs 3, Town costs 1 and is an objective.",
   },
   {
     title: "🧭 Unit Types",
