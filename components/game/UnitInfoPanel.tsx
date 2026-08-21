@@ -11,7 +11,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
     return (
       <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3 text-sm text-[#8a7f63]">
         {state.phase === "player-cavalry-move" && "Select one of your Cavalry units to see its movement range."}
-        {state.phase === "player-combat" && "Select one of your units to attack an adjacent enemy."}
+        {state.phase === "player-combat" && "Select one of your units to announce an attack on an adjacent enemy."}
         {state.phase === "player-move" && "Select one of your units to see its movement range."}
         {state.phase === "setup" && "Choose a unit from the tray, then place it."}
         {state.phase === "game-over" && "The campaign has ended."}

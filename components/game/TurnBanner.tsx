@@ -4,15 +4,15 @@ import type { GameState } from "@/lib/types";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Deployment",
-  "player-cavalry-move": "Cavalry Movement Phase",
-  "player-combat": "Combat Phase",
-  "player-move": "Movement Phase",
+  "player-cavalry-move": "1. Cavalry Moves",
+  "player-combat": "2. Announce Attacks",
+  "player-move": "3. All Units Move",
   "game-over": "Campaign Over",
 };
 
 const PHASE_BUTTON_LABEL: Record<string, string> = {
   "player-cavalry-move": "End Cavalry Move →",
-  "player-combat": "End Combat →",
+  "player-combat": "End Attacks →",
   "player-move": "End Turn →",
 };
 

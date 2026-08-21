@@ -10,16 +10,16 @@ const SECTIONS: { title: string; body: string }[] = [
     body: "Place your 8 units on the highlighted western hexes before Turn 1. Choose a unit from the tray, then click a deployment hex. Once all 8 are placed, the campaign begins.",
   },
   {
-    title: "🐎 1. Cavalry Movement Phase",
+    title: "🐎 1. Cavalry Moves",
     body: "Cavalry moves first, alone. Only your Cavalry units can move this phase — Infantry and Artillery hold their positions. Movement is based on the unit's Move value and the terrain cost of each hex it crosses; roads are fast (1 hex per move point). Units can't stack — one per hex, friend or foe. A unit that ends its move next to an enemy is in that enemy's Zone of Control and stops there.",
   },
   {
-    title: "⚔ 2. Combat Phase",
-    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to attack. The odds are your Attack value against the enemy's Defense value (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
+    title: "⚔ 2. Announce Attacks",
+    body: "Every unit — Cavalry, Infantry, and Artillery — may attack an adjacent enemy. Select one of your units and click an adjacent enemy to announce the attack; it resolves immediately. The odds are your Attack value against the enemy's Defense value (plus a terrain bonus if they're on a hill, in a forest, or in a town). A die is rolled against the Combat Results Table: Attacker Eliminated, Defender Retreats, Exchange (both destroyed), Defender Eliminated, or No Effect. A unit that can't retreat is eliminated instead.",
   },
   {
-    title: "🚶 3. Movement Phase",
-    body: "Every unit — including Cavalry a second time — may move once more, repositioning after the fighting. This is the only movement Infantry and Artillery get each turn; Cavalry gets this move on top of its earlier advance, giving it two moves in a single turn.",
+    title: "🚶 3. All Units Move",
+    body: "Every unit — including Cavalry a second time — may move once more, repositioning after the fighting. This is the only movement Infantry and Artillery get each turn; Cavalry gets this move on top of its earlier advance, giving it two moves in a single turn. Once you end this phase, it becomes the Coalition's turn.",
   },
   {
     title: "🗺 Terrain",
