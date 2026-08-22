@@ -17,7 +17,7 @@ const SUBTITLES: Record<VictoryReason, string> = {
   overrun: "The Grande Armée captured every town before the campaign clock ran out.",
   "annihilation-defender": "The Coalition army was wiped out — nothing remained to defend the towns.",
   "annihilation-attacker": "The Grande Armée was destroyed before it could take every town.",
-  "held-out": "The Coalition still held at least one town when the 6th turn ended.",
+  "held-out": "The Coalition still held at least one town when the campaign clock ran out.",
 };
 
 export default function VictoryModal({ state, onRestart }: { state: GameState; onRestart: () => void }) {

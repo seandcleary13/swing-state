@@ -4,13 +4,26 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { ORDER_OF_BATTLE, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { ORDER_OF_BATTLE, RESUPPLY_KINDS, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
-import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat } from "./ai";
+import { canTraceSupply, newUnitId } from "./supply";
+import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat, stepResupply } from "./ai";
 import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
 
+// Both armies start on the board, foot in front and guns at the back. Index-aligned with
+// ORDER_OF_BATTLE: 7 infantry, 3 cavalry, 2 heavy cavalry, 3 artillery.
+const FRANCE_DEPLOY: Array<[number, number]> = [
+  [1, 1], [1, 3], [1, 5], [1, 7], [1, 9], [1, 11], [1, 13],
+  [0, 2], [0, 6], [0, 10],
+  [0, 4], [0, 8],
+  [0, 0], [0, 12], [0, 13],
+];
+
 const COALITION_DEPLOY: Array<[number, number]> = [
-  [12, 1], [11, 2], [12, 4], [11, 5], [12, 7], [11, 8], [12, 10], [11, 11], [12, 12],
+  [17, 1], [17, 3], [17, 5], [17, 7], [17, 9], [17, 11], [17, 13],
+  [18, 2], [18, 6], [18, 10],
+  [18, 4], [18, 8],
+  [18, 0], [18, 12], [18, 13],
 ];
 
 function isOnHill(state: GameState, pos: HexCoord): boolean {
@@ -27,27 +40,9 @@ function casualtyPhrase(outcome: CasualtyOutcome): string {
   return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
 }
 
-function newId(units: Record<string, Unit>, faction: Faction): string {
-  const n = Object.values(units).filter((u) => u.faction === faction).length;
-  return `${faction}-${n}`;
-}
-
 function terrainMultiplier(state: GameState, pos: HexCoord): number {
   const tile = state.map[hexKey(pos)];
   return tile ? TERRAIN_DEFS[tile.terrain].defenseMultiplier : 1;
-}
-
-/** Player units with a live enemy in range that haven't attacked yet — mandatory-attack obligations. */
-export function getObligatedAttackerIds(state: GameState): Set<string> {
-  const set = new Set<string>();
-  if (state.phase !== "player-combat") return set;
-  const enemies = Object.values(state.units).filter((u) => u.faction === state.aiFaction);
-  for (const u of Object.values(state.units)) {
-    if (u.faction !== state.playerFaction || u.hasAttacked || u.routed) continue;
-    const range = attackRange(u.kind, isOnHill(state, u.pos));
-    if (enemies.some((e) => hexDistance(u.pos, e.pos) <= range)) set.add(u.id);
-  }
-  return set;
 }
 
 /**
@@ -131,19 +126,25 @@ export function initGameState(): GameState {
     if (tile.objective) tile.controlledBy = "coalition";
   }
 
+  // Both armies take the field already deployed — no placement step.
   const units: Record<string, Unit> = {};
   ORDER_OF_BATTLE.forEach((kind, i) => {
-    const [col, row] = COALITION_DEPLOY[i];
-    const id = `coalition-${i}`;
-    units[id] = { id, faction: "coalition", kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
+    for (const [faction, table] of [
+      ["france", FRANCE_DEPLOY] as const,
+      ["coalition", COALITION_DEPLOY] as const,
+    ]) {
+      const [col, row] = table[i];
+      const id = `${faction}-${i}`;
+      units[id] = { id, faction, kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
+    }
   });
 
   return {
     map,
     units,
     turn: 1,
-    totalTurns: 6,
-    phase: "setup",
+    totalTurns: 8,
+    phase: "player-resupply",
     playerFaction: "france",
     aiFaction: "coalition",
     attackerFaction: "france",
@@ -160,11 +161,10 @@ export function initGameState(): GameState {
       {
         id: "start",
         turn: 0,
-        text: "The Coalition holds every town in the region. The Grande Armée must break through and take them all before the campaign's 6 turns run out — deploy on the western hexes to begin.",
+        text: "The armies are drawn up. The Coalition holds every town in the region; the Grande Armée must break through and take them all before the campaign's 8 turns run out. Turn 1 begins with resupply.",
         kind: "setup",
       },
     ],
-    setupPool: { france: [...ORDER_OF_BATTLE], coalition: [] },
     winner: null,
     victoryReason: null,
     lastCombat: null,
@@ -172,7 +172,8 @@ export function initGameState(): GameState {
 }
 
 export type Action =
-  | { type: "SETUP_PLACE"; kind: UnitKind; hex: HexCoord }
+  | { type: "RESUPPLY_FLIP"; unitId: string }
+  | { type: "RESUPPLY_PLACE"; kind: UnitKind; hex: HexCoord }
   | { type: "SELECT_UNIT"; unitId: string | null }
   | { type: "MOVE_UNIT"; hex: HexCoord }
   | { type: "SELECT_ATTACK_TARGET"; targetId: string }
@@ -202,28 +203,34 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "RESET":
       return initGameState();
 
-    case "SETUP_PLACE": {
-      if (state.phase !== "setup") return state;
-      const pool = state.setupPool.france;
-      const idx = pool.indexOf(action.kind);
-      if (idx === -1) return state;
+    // --- Resupply: one action per turn, either bringing a worn unit back up to strength
+    // --- or raising a fresh (half-strength) formation at home.
+    case "RESUPPLY_FLIP": {
+      if (state.phase !== "player-resupply") return state;
+      const unit = state.units[action.unitId];
+      if (!unit || unit.faction !== state.playerFaction || !unit.reduced) return state;
+      if (!canTraceSupply(state, unit)) return state;
+
+      const units = { ...state.units, [unit.id]: { ...unit, reduced: false } };
+      let next: GameState = { ...state, units, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+      next = addLog(next, `${unitDisplayName(unit.faction, unit.kind)} draws supply and is back up to full strength.`, "info");
+      return next;
+    }
+
+    case "RESUPPLY_PLACE": {
+      if (state.phase !== "player-resupply") return state;
+      if (!RESUPPLY_KINDS.includes(action.kind)) return state;
       const tile = state.map[hexKey(action.hex)];
-      if (!tile || tile.deploymentFor !== "france") return state;
+      if (!tile || tile.deploymentFor !== state.playerFaction) return state;
       if (unitAt(state.units, action.hex)) return state;
 
-      const id = newId(state.units, "france");
+      const id = newUnitId(state.units, state.playerFaction);
       const units = {
         ...state.units,
-        [id]: { id, faction: "france" as const, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false },
+        [id]: { id, faction: state.playerFaction, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: true },
       };
-      const newPool = [...pool];
-      newPool.splice(idx, 1);
-      const setupPool = { ...state.setupPool, france: newPool };
-      const done = newPool.length === 0;
-
-      let next: GameState = { ...state, units, setupPool, phase: done ? "player-cavalry-move" : "setup" };
-      next = addLog(next, `${unitDisplayName("france", action.kind)} deployed to ${tile.objectiveName ?? `hex ${action.hex.col}-${action.hex.row}`}.`, "setup");
-      if (done) next = addLog(next, "Deployment complete. Turn 1 begins — cavalry advances first.", "info");
+      let next: GameState = { ...state, units, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+      next = addLog(next, `A fresh ${unitDisplayName(state.playerFaction, action.kind)} formation musters at half strength.`, "info");
       return next;
     }
 
@@ -440,20 +447,15 @@ export function gameReducer(state: GameState, action: Action): GameState {
     }
 
     case "END_PHASE": {
+      if (state.phase === "player-resupply") {
+        return { ...state, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+      }
+
       if (state.phase === "player-cavalry-move") {
         return { ...state, phase: "player-combat", selectedUnitId: null, reachable: {} };
       }
 
       if (state.phase === "player-combat") {
-        const obligated = getObligatedAttackerIds(state);
-        if (obligated.size > 0) {
-          const plural = obligated.size > 1;
-          return addLog(
-            state,
-            `${obligated.size} unit${plural ? "s" : ""} ${plural ? "have" : "has"} an enemy in range and must attack before this phase can end.`,
-            "info"
-          );
-        }
         return { ...state, phase: "player-move", selectedUnitId: null, reachable: {}, combatTargetId: null, combatAttackerIds: [] };
       }
 
@@ -469,7 +471,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
         next = {
           ...next,
           phase: "ai-turn",
-          aiTurnState: { subPhase: "cavalry", queue: buildCavalryQueue(next), pendingAutoAdvance: null },
+          aiTurnState: { subPhase: "resupply", queue: [], pendingAutoAdvance: null },
         };
         return next;
       }
@@ -509,6 +511,18 @@ function advanceAiTurnOnce(state: GameState): GameState {
 
   while (working.aiTurnState) {
     const ats: AiTurnState = working.aiTurnState;
+
+    // Resupply is a single action rather than a per-unit queue.
+    if (ats.subPhase === "resupply") {
+      const beforeUnits = working.units;
+      const after = stepResupply(working);
+      working = {
+        ...after,
+        aiTurnState: { subPhase: "cavalry", queue: buildCavalryQueue(after), pendingAutoAdvance: null },
+      };
+      if (after.units !== beforeUnits) return working;
+      continue;
+    }
 
     if (ats.queue.length === 0) {
       if (ats.subPhase === "cavalry") {
@@ -560,7 +574,7 @@ function finalizeAiTurn(state: GameState): GameState {
   }
 
   next = resetFactionFlags(next, next.playerFaction);
-  next = { ...next, turn: nextTurn, phase: "player-cavalry-move", aiTurnState: null };
-  next = addLog(next, `Turn ${nextTurn} begins — cavalry advances first.`, "info");
+  next = { ...next, turn: nextTurn, phase: "player-resupply", aiTurnState: null };
+  next = addLog(next, `Turn ${nextTurn} begins — resupply first.`, "info");
   return next;
 }

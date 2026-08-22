@@ -72,15 +72,25 @@ export function applyCasualty(
   return { units: { ...units, [unitId]: { ...unit, reduced: true } }, outcome: "reduced" };
 }
 
-// Order of battle for each side — 9 units, small tutorial-scale scenario.
+// Order of battle for each side — 15 units. Ordered infantry → cavalry → heavy → artillery
+// to match the deployment tables, which put the foot in front and the guns at the back.
 export const ORDER_OF_BATTLE: UnitKind[] = [
   "infantry",
   "infantry",
   "infantry",
   "infantry",
+  "infantry",
+  "infantry",
+  "infantry",
+  "cavalry",
   "cavalry",
   "cavalry",
   "heavy-cavalry",
+  "heavy-cavalry",
+  "artillery",
   "artillery",
   "artillery",
 ];
+
+// Resupply can raise fresh formations of the common arms — elite Heavy Cavalry can't be replaced.
+export const RESUPPLY_KINDS: UnitKind[] = ["infantry", "cavalry", "artillery"];

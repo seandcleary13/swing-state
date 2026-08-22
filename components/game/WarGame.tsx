@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useState } from "react";
-import { gameReducer, getObligatedAttackerIds, initGameState } from "@/lib/gameEngine";
+import { gameReducer, initGameState } from "@/lib/gameEngine";
 import { hexDistance, hexKey, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
+import { resupplyableUnitIds } from "@/lib/supply";
 import { attackRange, isCavalryKind } from "@/lib/units";
 import type { UnitKind } from "@/lib/types";
 import HexGrid from "./HexGrid";
 import TurnBanner from "./TurnBanner";
-import SetupTray from "./SetupTray";
 import UnitInfoPanel from "./UnitInfoPanel";
 import CombatLog from "./CombatLog";
 import CombatPreview from "./CombatPreview";
 import RetreatPrompt from "./RetreatPrompt";
 import AdvancePrompt from "./AdvancePrompt";
+import ResupplyPrompt from "./ResupplyPrompt";
 import VictoryModal from "./VictoryModal";
 import RulesPanel from "./RulesPanel";
 import { cn } from "@/lib/utils";
@@ -54,8 +55,11 @@ export default function WarGame() {
     return set;
   }, [state]);
 
-  // Units with a live enemy in range that haven't attacked yet — must fight before the phase can end.
-  const obligatedAttackerIds = useMemo(() => getObligatedAttackerIds(state), [state]);
+  // Reduced units that can trace a line of supply, so could be brought back to full strength.
+  const resupplyableIds = useMemo(() => {
+    if (state.phase !== "player-resupply") return new Set<string>();
+    return resupplyableUnitIds(state, state.playerFaction);
+  }, [state]);
 
   // Steps the Coalition's turn forward on a timer, pausing whenever an interactive retreat
   // choice is handed to the player mid-turn.
@@ -64,6 +68,11 @@ export default function WarGame() {
     const t = setTimeout(() => dispatch({ type: "ADVANCE_AI_STEP" }), AI_STEP_DELAY_MS);
     return () => clearTimeout(t);
   }, [state]);
+
+  // Drop a staged reinforcement whenever the resupply phase ends.
+  useEffect(() => {
+    if (state.phase !== "player-resupply" && pendingKind) setPendingKind(null);
+  }, [state.phase, pendingKind]);
 
   function handleHexClick(hex: HexCoord) {
     const key = hexKey(hex);
@@ -77,10 +86,12 @@ export default function WarGame() {
 
     if (state.pendingAdvance) return;
 
-    if (state.phase === "setup") {
-      if (pendingKind && tile?.deploymentFor === "france" && !occ) {
-        dispatch({ type: "SETUP_PLACE", kind: pendingKind, hex });
+    if (state.phase === "player-resupply") {
+      if (pendingKind && tile?.deploymentFor === state.playerFaction && !occ) {
+        dispatch({ type: "RESUPPLY_PLACE", kind: pendingKind, hex });
         setPendingKind(null);
+      } else if (occ && resupplyableIds.has(occ.id)) {
+        dispatch({ type: "RESUPPLY_FLIP", unitId: occ.id });
       }
       return;
     }
@@ -120,7 +131,7 @@ export default function WarGame() {
 
   return (
     <div className="min-h-screen flex flex-col items-center py-4 px-3" style={{ background: "radial-gradient(ellipse at top, #1a140b 0%, #0c0a06 65%)" }}>
-      <div className="w-full max-w-4xl flex flex-col gap-3">
+      <div className="w-full max-w-5xl flex flex-col gap-3">
         <div className="text-center">
           <h1 className="text-3xl font-black tracking-widest text-[#f4d35e]" style={{ textShadow: "0 0 24px rgba(212,169,74,0.35)" }}>
             1815: FIELD OF EAGLES
@@ -153,10 +164,6 @@ export default function WarGame() {
               onSkip={() => dispatch({ type: "SKIP_AI_TURN" })}
             />
 
-            {state.phase === "setup" && (
-              <SetupTray pool={state.setupPool.france} pending={pendingKind} onSelect={setPendingKind} />
-            )}
-
             {state.pendingRetreat ? (
               <RetreatPrompt state={state} onStop={() => dispatch({ type: "STOP_RETREAT" })} />
             ) : state.pendingAdvance ? (
@@ -164,6 +171,15 @@ export default function WarGame() {
                 state={state}
                 onConfirm={() => dispatch({ type: "CONFIRM_ADVANCE" })}
                 onDecline={() => dispatch({ type: "DECLINE_ADVANCE" })}
+              />
+            ) : state.phase === "player-resupply" ? (
+              <ResupplyPrompt
+                state={state}
+                resupplyableIds={resupplyableIds}
+                pendingKind={pendingKind}
+                onSelectKind={setPendingKind}
+                onFlip={(unitId) => dispatch({ type: "RESUPPLY_FLIP", unitId })}
+                onSkip={() => dispatch({ type: "END_PHASE" })}
               />
             ) : state.phase === "player-combat" ? (
               <CombatPreview
@@ -179,7 +195,8 @@ export default function WarGame() {
                 onHexClick={handleHexClick}
                 attackableIds={targetableEnemyIds}
                 eligibleAttackerIds={eligibleAttackerIds}
-                obligatedAttackerIds={obligatedAttackerIds}
+                resupplyableIds={resupplyableIds}
+                placementActive={state.phase === "player-resupply" && pendingKind !== null}
               />
             </div>
 

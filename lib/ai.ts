@@ -4,9 +4,10 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { RESUPPLY_KINDS, UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
-import type { Faction, GameState, Unit } from "./types";
+import { canTraceSupply, newUnitId, openHomeHexes } from "./supply";
+import type { Faction, GameState, Unit, UnitKind } from "./types";
 
 function casualtyPhrase(outcome: CasualtyOutcome): string {
   return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
@@ -53,6 +54,51 @@ function nearestTargetDistance(state: GameState, from: HexCoord, aiFaction: Fact
           .map((u) => u.pos);
   if (!targets.length) return 0;
   return Math.min(...targets.map((t) => hexDistance(from, t)));
+}
+
+/**
+ * The Coalition's single resupply action for the turn: bring its most valuable in-supply unit
+ * back up to strength if it can, otherwise raise a fresh half-strength formation of whichever
+ * arm it is shortest of. Returns `state` unchanged (same `units` reference) when it can do
+ * neither, which the caller reads as a no-op.
+ */
+export function stepResupply(state: GameState): GameState {
+  const faction = state.aiFaction;
+
+  const recoverable = Object.values(state.units)
+    .filter((u) => u.faction === faction && u.reduced && canTraceSupply(state, u))
+    .sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power);
+
+  if (recoverable.length) {
+    const unit = recoverable[0];
+    return addLog(
+      { ...state, units: { ...state.units, [unit.id]: { ...unit, reduced: false } } },
+      `${unitDisplayName(faction, unit.kind)} draws supply and is back up to full strength.`,
+      "info"
+    );
+  }
+
+  const open = openHomeHexes(state, faction);
+  if (!open.length) return state;
+
+  const counts = new Map<UnitKind, number>(RESUPPLY_KINDS.map((k) => [k, 0]));
+  for (const u of Object.values(state.units)) {
+    if (u.faction === faction && counts.has(u.kind)) counts.set(u.kind, counts.get(u.kind)! + 1);
+  }
+  const kind = [...counts.entries()].sort((a, b) => a[1] - b[1])[0][0];
+  const id = newUnitId(state.units, faction);
+
+  return addLog(
+    {
+      ...state,
+      units: {
+        ...state.units,
+        [id]: { id, faction, kind, pos: open[0], hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: true },
+      },
+    },
+    `A fresh ${unitDisplayName(faction, kind)} formation musters at half strength.`,
+    "info"
+  );
 }
 
 /** AI cavalry, movement-descending — mirrors the order the opening cavalry-move sub-phase resolves in. */
@@ -152,9 +198,9 @@ export function stepCombat(state: GameState, unitId: string): GameState {
       bestTarget = t;
     }
   }
-  // Mandatory attack: any unit with a live target in range must fight, even at bad odds —
-  // it just picks its best available odds rather than skipping the fight entirely.
-  if (!bestTarget) return state;
+  // Attacking is optional for both sides, so the Coalition declines fights it doesn't like:
+  // it only commits when its best available odds are at least even.
+  if (!bestTarget || bestRatio < 1) return state;
 
   const attackerName = unitDisplayName(aiFaction, live.kind);
   const defenderName = unitDisplayName(playerFaction, bestTarget.kind);

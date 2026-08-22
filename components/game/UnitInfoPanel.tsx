@@ -10,10 +10,11 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
   if (!unit) {
     return (
       <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3 text-sm text-[#8a7f63]">
+        {state.phase === "player-resupply" && "Bring one worn unit back to full strength, or muster a fresh half-strength formation — or skip."}
         {state.phase === "player-cavalry-move" && "Select one of your Cavalry units to see its movement range."}
         {state.phase === "player-combat" && "Click an enemy to target it, then click your units in range to commit them, then confirm the attack."}
         {state.phase === "player-move" && "Select one of your units to see its movement range."}
-        {state.phase === "setup" && "Choose a unit from the tray, then place it."}
+        {state.phase === "ai-turn" && "The Coalition is taking its turn."}
         {state.phase === "game-over" && "The campaign has ended."}
       </div>
     );

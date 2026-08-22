@@ -26,11 +26,13 @@ interface Props {
   attackableIds: Set<string>;
   /** Player units in range of the currently-targeted enemy, available to add to the attack. */
   eligibleAttackerIds: Set<string>;
-  /** Player units with a live enemy in range that haven't attacked yet — must fight this phase. */
-  obligatedAttackerIds: Set<string>;
+  /** Reduced player units in supply that could be brought back to full strength this phase. */
+  resupplyableIds: Set<string>;
+  /** A reinforcement is staged, so open home hexes should be highlighted for placement. */
+  placementActive: boolean;
 }
 
-export default function HexGrid({ state, onHexClick, attackableIds, eligibleAttackerIds, obligatedAttackerIds }: Props) {
+export default function HexGrid({ state, onHexClick, attackableIds, eligibleAttackerIds, resupplyableIds, placementActive }: Props) {
   const { map, units, selectedUnitId, reachable, retreatOptions, phase, playerFaction } = state;
   const width = COLS * 51 + 60;
   const height = ROWS * 59 + 90;
@@ -67,10 +69,10 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
         const isReachable = key in reachable;
         const isRetreatOption = key in retreatOptions;
         const unit = unitByHex.get(key);
-        const deployHighlight = phase === "setup" && tile.deploymentFor === "france" && !unit;
+        const deployHighlight = placementActive && tile.deploymentFor === playerFaction && !unit;
 
         return (
-          <g key={key} data-hex={key} data-deploy={tile.deploymentFor ?? ""} data-retreat-option={isRetreatOption || undefined} onClick={() => onHexClick(hex)} className="cursor-pointer">
+          <g key={key} data-hex={key} data-deploy={tile.deploymentFor ?? ""} data-place-option={deployHighlight || undefined} data-retreat-option={isRetreatOption || undefined} onClick={() => onHexClick(hex)} className="cursor-pointer">
             <polygon
               points={points}
               fill={TERRAIN_FILL[tile.terrain]}
@@ -131,7 +133,7 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
         const isTarget = state.combatTargetId === unit.id;
         const isCommitted = state.combatAttackerIds.includes(unit.id);
         const isEligible = eligibleAttackerIds.has(unit.id);
-        const isObligated = obligatedAttackerIds.has(unit.id);
+        const isResupplyable = resupplyableIds.has(unit.id);
         const isRetreating = state.pendingRetreat?.unitId === unit.id;
         const isPlayer = unit.faction === playerFaction;
         const dimmed =
@@ -158,17 +160,16 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
           stroke = "#ece2c8";
           strokeWidth = 2;
           dash = "2 2";
-        } else if (isObligated) {
-          stroke = "#ff6b6b";
-          strokeWidth = 2.5;
-          dash = "4 2";
+        } else if (isResupplyable) {
+          stroke = "#7fa86e";
+          strokeWidth = 3;
         } else if (isTargetable) {
           stroke = "#ff6b6b";
           strokeWidth = 2;
         }
 
         return (
-          <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} data-obligated={isObligated || undefined} data-retreating={isRetreating || undefined} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
+          <g key={unit.id} data-unit={unit.id} data-hex={hexKey(unit.pos)} data-resupplyable={isResupplyable || undefined} data-reduced={unit.reduced || undefined} data-retreating={isRetreating || undefined} onClick={(e) => { e.stopPropagation(); onHexClick(unit.pos); }} className="cursor-pointer">
             <rect
               x={x - 19}
               y={y - 17}

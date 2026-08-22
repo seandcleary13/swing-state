@@ -52,9 +52,10 @@ export interface Unit {
   reduced: boolean;
 }
 
-// Turn order: cavalry advances alone, then everyone fights, then everyone (incl. cavalry again) repositions.
+// Turn order: resupply, then cavalry advances alone, then everyone fights, then everyone
+// (incl. cavalry again) repositions.
 export type GamePhase =
-  | "setup"
+  | "player-resupply"
   | "player-cavalry-move"
   | "player-combat"
   | "player-move"
@@ -86,7 +87,7 @@ export interface PendingAdvance {
 
 /** Drives the Coalition's turn one step at a time instead of resolving it all at once. */
 export interface AiTurnState {
-  subPhase: "cavalry" | "combat" | "move";
+  subPhase: "resupply" | "cavalry" | "combat" | "move";
   queue: string[];
   pendingAutoAdvance: { attackerId: string; hex: HexCoord } | null;
 }
@@ -115,7 +116,6 @@ export interface GameState {
   /** Non-null only during phase "ai-turn": drives the Coalition's turn one step at a time. */
   aiTurnState: AiTurnState | null;
   log: CombatLogEntry[];
-  setupPool: Record<Faction, UnitKind[]>; // remaining units to deploy
   winner: Faction | "draw" | null;
   victoryReason: VictoryReason | null;
   lastCombat: { attackers: string[]; defender: string; odds: string; roll: number; result: string } | null;

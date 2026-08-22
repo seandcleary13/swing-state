@@ -15,7 +15,7 @@ export function unitAt(units: Record<string, Unit>, pos: HexCoord): Unit | undef
   return undefined;
 }
 
-function isEnemyZoc(state: GameState, pos: HexCoord, faction: Faction): boolean {
+export function isEnemyZoc(state: GameState, pos: HexCoord, faction: Faction): boolean {
   const enemy = otherFaction(faction);
   return hexNeighbors(pos).some((n) => {
     const u = unitAt(state.units, n);
