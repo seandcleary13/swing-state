@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useReducer, useState } from "react";
-import { gameReducer, initGameState } from "@/lib/gameEngine";
+import { initUndoableState, undoableReducer } from "@/lib/gameEngine";
 import { hexDistance, hexKey, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
 import { resupplyableUnitIds } from "@/lib/supply";
@@ -22,9 +22,10 @@ import { cn } from "@/lib/utils";
 const AI_STEP_DELAY_MS = 600;
 
 export default function WarGame() {
-  const [state, dispatch] = useReducer(gameReducer, undefined, initGameState);
+  const [{ present: state, past }, dispatch] = useReducer(undoableReducer, undefined, initUndoableState);
   const [pendingKind, setPendingKind] = useState<UnitKind | null>(null);
   const [tab, setTab] = useState<"battle" | "rules">("battle");
+  const canUndo = past.length > 0 && !state.pendingRetreat && !state.pendingAdvance && state.phase !== "ai-turn";
 
   const isOnHill = (pos: HexCoord) => state.map[hexKey(pos)]?.terrain === "hill";
 
@@ -162,6 +163,8 @@ export default function WarGame() {
               state={state}
               onEndPhase={() => dispatch({ type: "END_PHASE" })}
               onSkip={() => dispatch({ type: "SKIP_AI_TURN" })}
+              onUndo={() => dispatch({ type: "UNDO" })}
+              canUndo={canUndo}
             />
 
             {state.pendingRetreat ? (

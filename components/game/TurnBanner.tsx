@@ -26,10 +26,14 @@ export default function TurnBanner({
   state,
   onEndPhase,
   onSkip,
+  onUndo,
+  canUndo,
 }: {
   state: GameState;
   onEndPhase: () => void;
   onSkip: () => void;
+  onUndo: () => void;
+  canUndo: boolean;
 }) {
   const totalTowns = Object.values(state.map).filter((t) => t.objective).length;
   const franceTowns = townCount(state, "france");
@@ -53,6 +57,18 @@ export default function TurnBanner({
             <div className="text-[10px] text-[#8a7f63]">COALITION · DEFENDER</div>
           </div>
         </div>
+        {state.phase !== "ai-turn" && state.phase !== "game-over" && (
+          <button
+            onClick={onUndo}
+            disabled={!canUndo}
+            title={canUndo ? "Take back your last move" : "Nothing to take back — attacks are final"}
+            data-undo
+            data-undo-enabled={canUndo || undefined}
+            className="px-3 py-2 rounded-md font-black text-sm tracking-wide border border-[#8a7f63] text-[#cbbf9c] enabled:hover:bg-[#3a2f1c] transition disabled:opacity-35 disabled:cursor-not-allowed"
+          >
+            ↩ Undo
+          </button>
+        )}
         {state.phase in PHASE_BUTTON_LABEL && (
           <button
             onClick={onEndPhase}

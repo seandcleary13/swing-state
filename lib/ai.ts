@@ -4,7 +4,7 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { RESUPPLY_KINDS, UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { RESUPPLY_KINDS, UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
 import { canTraceSupply, newUnitId, openHomeHexes } from "./supply";
 import type { Faction, GameState, Unit, UnitKind } from "./types";
@@ -146,7 +146,7 @@ export function stepAdvance(
       .filter((u): u is Unit => !!u && u.faction === playerFaction);
     const goodFight = adjEnemies.some((e) => {
       const atk = currentPower(live);
-      const def = defensePower(currentPower(e), terrainMultiplier(state, e.pos));
+      const def = defensePower(defenseValue(e), terrainMultiplier(state, e.pos));
       return atk / Math.max(def, 0.5) >= 1;
     });
     if (goodFight) return state; // stay and fight this combat phase
@@ -191,7 +191,7 @@ export function stepCombat(state: GameState, unitId: string): GameState {
   let bestRatio = -Infinity;
   for (const t of targets) {
     const atk = currentPower(live);
-    const def = defensePower(currentPower(t), terrainMultiplier(state, t.pos));
+    const def = defensePower(defenseValue(t), terrainMultiplier(state, t.pos));
     const ratio = atk / Math.max(def, 0.5);
     if (ratio > bestRatio) {
       bestRatio = ratio;
@@ -205,7 +205,7 @@ export function stepCombat(state: GameState, unitId: string): GameState {
   const attackerName = unitDisplayName(aiFaction, live.kind);
   const defenderName = unitDisplayName(playerFaction, bestTarget.kind);
   const atk = currentPower(live);
-  const def = defensePower(currentPower(bestTarget), terrainMultiplier(state, bestTarget.pos));
+  const def = defensePower(defenseValue(bestTarget), terrainMultiplier(state, bestTarget.pos));
   const roll = randomInt(1, 6);
   const { odds, result } = rollCombat(atk, def, roll);
   const wasAdjacent = hexDistance(live.pos, bestTarget.pos) === 1;
@@ -266,6 +266,20 @@ export function stepCombat(state: GameState, unitId: string): GameState {
     next = beginRetreats(next, [bestTarget.id], live.pos);
     if (next.aiTurnState) {
       next = { ...next, aiTurnState: { ...next.aiTurnState, pendingAutoAdvance: next.pendingRetreat ? pendingAutoAdvance : null } };
+    }
+  }
+
+  // Whenever the ground the defender held ends up empty — it fell back, or it was destroyed —
+  // a surviving adjacent attacker takes it. A retreat the player is still choosing waits for
+  // `pendingAutoAdvance` to be applied once they finish.
+  if (!next.pendingRetreat && wasAdjacent && next.units[live.id]) {
+    const vacatedKey = hexKey(vacatedPos);
+    const occupied = Object.values(next.units).some((u) => hexKey(u.pos) === vacatedKey);
+    if (!occupied) {
+      next = recomputeObjectiveControl({
+        ...next,
+        units: { ...next.units, [live.id]: { ...next.units[live.id], pos: vacatedPos } },
+      });
     }
   }
 

@@ -1,6 +1,17 @@
 import { hexKey, hexNeighbors, type HexCoord } from "./hex";
-import { isEnemyZoc, unitAt } from "./movement";
+import { isEnemyZoc, otherFaction, unitAt } from "./movement";
 import type { Faction, GameState, Unit } from "./types";
+
+/** True only when every on-map hex around `pos` holds an enemy unit — a closed ring. */
+function isEncircled(state: GameState, pos: HexCoord, faction: Faction): boolean {
+  const enemy = otherFaction(faction);
+  const neighbors = hexNeighbors(pos).filter((n) => !!state.map[hexKey(n)]);
+  if (!neighbors.length) return true;
+  return neighbors.every((n) => {
+    const occupant = unitAt(state.units, n);
+    return !!occupant && occupant.faction === enemy;
+  });
+}
 
 /** A hex a faction can draw supply from: one of its own home-edge hexes, or a town it controls. */
 function isSupplySource(state: GameState, pos: HexCoord, faction: Faction): boolean {
@@ -17,6 +28,13 @@ function isSupplySource(state: GameState, pos: HexCoord, faction: Faction): bool
  * break contact before it can be resupplied. Friendly units pass supply along freely.
  */
 export function canTraceSupply(state: GameState, unit: Unit): boolean {
+  // A garrison holding a town of its own draws on the town itself, so it stays in supply even
+  // under siege — right up until the enemy closes a complete ring around it.
+  const here = state.map[hexKey(unit.pos)];
+  if (here?.objective && here.controlledBy === unit.faction) {
+    return !isEncircled(state, unit.pos, unit.faction);
+  }
+
   if (isEnemyZoc(state, unit.pos, unit.faction)) return false;
   if (isSupplySource(state, unit.pos, unit.faction)) return true;
 

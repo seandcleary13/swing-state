@@ -10,7 +10,7 @@ export const RESULT_LABELS: Record<CombatResult, string> = {
 };
 
 // Odds columns, weakest to strongest for the attacker.
-const ODDS_COLUMNS = ["1:3", "1:2", "1:1", "2:1", "3:1", "4:1", "5:1"] as const;
+export const ODDS_COLUMNS = ["1:3", "1:2", "1:1", "2:1", "3:1", "4:1", "5:1"] as const;
 export type OddsColumn = (typeof ODDS_COLUMNS)[number];
 
 // Combat Results Table: [odds column][die roll 1-6]
@@ -18,7 +18,7 @@ export type OddsColumn = (typeof ODDS_COLUMNS)[number];
 // defender specifically is harder to wipe out outright (no DE below 2:1 odds).
 // Attacker Eliminated is reserved for the single worst roll at the worst odds —
 // otherwise a bad attack just falls back (Ar) rather than being destroyed.
-const CRT: Record<OddsColumn, CombatResult[]> = {
+export const CRT: Record<OddsColumn, CombatResult[]> = {
   "1:3": ["AE", "Ar", "Ar", "DR", "DR", "NE"],
   "1:2": ["Ar", "Ar", "DR", "DR", "EX", "NE"],
   "1:1": ["Ar", "DR", "DR", "DR", "EX", "EX"],

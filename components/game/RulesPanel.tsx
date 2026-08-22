@@ -1,5 +1,7 @@
 "use client";
 
+import CrtTable from "./CrtTable";
+
 const SECTIONS: { title: string; body: string }[] = [
   {
     title: "🎯 Objective — Attacker vs. Defender",
@@ -14,12 +16,16 @@ const SECTIONS: { title: string; body: string }[] = [
     body: "At the start of each of your turns you may take one resupply action — or skip it. Either bring ONE worn (reduced) unit back to full strength, or muster ONE fresh formation at half strength on your own edge of the board. To be brought back up, a unit must trace a line of supply back to a town your side controls or to your own edge — a line that can't pass through enemy units or their Zones of Control, and a unit standing next to an enemy is cut off entirely and must break contact first. Units eligible to recover are ringed in green. Fresh formations can be Infantry, Cavalry or Artillery — elite Heavy Cavalry can never be replaced.",
   },
   {
+    title: "🏰 Sieges",
+    body: "A garrison sitting in a town its own side controls is the exception to all of that: it draws supply from the town itself and can always be brought back to full strength, however many enemies are pressed up against it. The only way to starve it out is to close a complete ring — every single hex around the town occupied by your units. Leave one gap and the garrison keeps recovering.",
+  },
+  {
     title: "🐎 2. Cavalry Moves",
     body: "Cavalry moves first, alone. Only your Cavalry units can move this phase — Infantry and Artillery hold their positions. Movement is based on the unit's Move value and the terrain cost of each hex it crosses; roads are fast (1 hex per move point). Units can't stack — one per hex, friend or foe. A unit that ends its move next to an enemy is in that enemy's Zone of Control and stops there.",
   },
   {
     title: "⚔ 3. Announce Attacks",
-    body: "Attacking is always optional — no unit is ever forced to fight, on either side. Click an enemy unit to target it, then click any of your own units within range to commit them — pile on several units against one target if you like, their Power adds together. A preview shows the combined odds; click Attack to confirm and roll. Every unit can attack an adjacent enemy; Artillery can also fire from 2 hexes away, or 3 if it's standing on a hill.",
+    body: "Attacking is always optional — no unit is ever forced to fight, on either side. Click an enemy unit to target it, then click any of your own units within range to commit them — pile on several units against one target if you like, their Power adds together. A preview shows the combined odds, and \"Check combat results table\" opens the full table with your odds column marked so you can see exactly what each roll would do before committing. Click Attack to confirm and roll. Every unit can attack an adjacent enemy; Artillery can also fire from 2 hexes away, or 3 if it's standing on a hill.",
   },
   {
     title: "🎲 Combat Results Table",
@@ -27,11 +33,19 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🏃 Retreats",
-    body: "Whichever side owns the retreating unit chooses its path, one hex at a time, up to 3 hexes — you're never forced to use the full distance, and can stop early with the \"Stop Retreating\" button once you've fallen back at least one hex. If there's nowhere at all to go, the unit is reduced to half strength instead — or eliminated, if it was already reduced. When your own attack forces a Defender Retreat, you get to choose whether the attacking unit advances into the vacated ground or holds its position.",
+    body: "Whichever side owns the retreating unit chooses its path, one hex at a time, up to 3 hexes — you're never forced to use the full distance, and can stop early with the \"Stop Retreating\" button once you've fallen back at least one hex. If there's nowhere at all to go, the unit is reduced to half strength instead — or eliminated, if it was already reduced.",
   },
   {
-    title: "🎯 Bombarding Artillery",
-    body: "Artillery firing from 2+ hexes away (not adjacent) is never eliminated, traded away in an Exchange, or forced to retreat by its own attack — only the target is at risk. Artillery fighting from an adjacent hex is treated like any other unit and takes its full share of the result.",
+    title: "🚩 Advancing After Combat",
+    body: "Any time the defender's hex ends up empty — it fell back, or it was destroyed outright — one of your adjacent attacking units may advance into the ground it held. You choose whether to take it or hold position. If the defender was only reduced rather than destroyed it's still standing there, so there's nothing to advance into. Artillery bombarding from range never advances.",
+  },
+  {
+    title: "🎯 Artillery",
+    body: "Guns hit hard but can't defend themselves: Artillery ALWAYS defends at a value of 2 before terrain — never its Power — whether at full strength or reduced. Caught in the open it is easy meat; parked in a town or on a hill it doubles to 4. Artillery firing from 2+ hexes away (not adjacent) is bombarding: it is never eliminated, traded away in an Exchange, or forced to retreat by its own attack, and only the target is at risk. Artillery fighting from an adjacent hex takes its full share of the result like anyone else.",
+  },
+  {
+    title: "↩ Undo",
+    body: "The Undo button takes back your last move, and you can keep pressing it to walk all the way back to the start of your turn. It covers movement and resupply only — confirming an attack is final. The moment you roll the dice the history is cleared, so a bad combat result can't be rewound and re-rolled, and handing the turn over to the Coalition closes the door behind you.",
   },
   {
     title: "🚶 4. All Units Move",
@@ -47,7 +61,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🧭 Unit Types",
-    body: "Each unit's numbers read Power-Movement. Cavalry (6 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (12 Power / 5 Movement) hit just as hard as Artillery but keep Cavalry's speed and get the two-move cavalry phases — a battering ram for the Attacker. Infantry (8 Power / 4 Movement) are the balanced backbone of the army. Artillery (10 Power / 3 Movement) hits hard but is slow to reposition. A reduced unit fights at half its listed Power (shown as a violet-outlined counter) until it's eliminated or the battle ends — its Movement is unaffected.",
+    body: "Each unit's numbers read Power-Movement. Cavalry (6 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (12 Power / 5 Movement) are the hardest hitters on the field and keep Cavalry's speed and two-move phases — a battering ram for the Attacker. Infantry (8 Power / 4 Movement) are the balanced backbone of the army. Artillery (10 Power / 3 Movement) hits hard but is slow to reposition and defends at only 2. A reduced unit fights at half its listed Power (shown as a violet-outlined counter) until it's eliminated or the battle ends — its Movement is unaffected.",
   },
 ];
 
@@ -60,6 +74,11 @@ export default function RulesPanel() {
           <p className="text-sm leading-relaxed text-[#cbbf9c]">{s.body}</p>
         </div>
       ))}
+
+      <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3">
+        <div className="text-sm font-black text-[#f4d35e] mb-2">🎲 The Table Itself</div>
+        <CrtTable />
+      </div>
     </div>
   );
 }

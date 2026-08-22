@@ -52,6 +52,15 @@ export function currentPower(unit: Unit): number {
   return unit.reduced ? base / 2 : base;
 }
 
+// Guns hit hard at range but are nearly helpless once charged: artillery always defends at a
+// flat 2 before terrain, whether at full strength or reduced. Every other arm defends at its
+// current Power.
+export const ARTILLERY_DEFENSE = 2;
+
+export function defenseValue(unit: Unit): number {
+  return unit.kind === "artillery" ? ARTILLERY_DEFENSE : currentPower(unit);
+}
+
 export type CasualtyOutcome = "reduced" | "eliminated";
 
 /**

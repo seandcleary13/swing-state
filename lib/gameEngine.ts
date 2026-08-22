@@ -4,7 +4,7 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { ORDER_OF_BATTLE, RESUPPLY_KINDS, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { ORDER_OF_BATTLE, RESUPPLY_KINDS, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
 import { canTraceSupply, newUnitId } from "./supply";
 import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat, stepResupply } from "./ai";
@@ -311,7 +311,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (defender.faction !== state.aiFaction) return state;
 
       const atk = attackers.reduce((sum, u) => sum + currentPower(u), 0);
-      const def = defensePower(currentPower(defender), terrainMultiplier(state, defender.pos));
+      const def = defensePower(defenseValue(defender), terrainMultiplier(state, defender.pos));
       const roll = Math.floor(Math.random() * 6) + 1;
       const { odds, result } = rollCombat(atk, def, roll);
       const attackerNames = joinNames(attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)));
@@ -324,7 +324,6 @@ export function gameReducer(state: GameState, action: Action): GameState {
       for (const a of attackers) units[a.id] = { ...units[a.id], hasAttacked: true };
 
       let text = "";
-      let drAdvanceOffer: { attackerId: string; hex: HexCoord } | null = null;
       if (result === "NE") {
         text = `${attackerNames} attack ${defenderName} at ${odds} — no effect (roll ${roll}).`;
       } else if (result === "AE") {
@@ -359,14 +358,9 @@ export function gameReducer(state: GameState, action: Action): GameState {
           text = `${attackerNames} clash with ${defenderName} at ${odds} — ${defenderName} is ${casualtyPhrase(defResult.outcome)}, and ${weakestName} is ${casualtyPhrase(atkResult.outcome)} (roll ${roll}).`;
         }
       } else if (result === "DR") {
-        const vacatedPos = defender.pos;
         const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), MAX_RETREAT_HEXES);
         if (retreat) {
           units[defender.id] = { ...defender, pos: retreat, routed: true };
-          if (adjacentAttackers.length) {
-            const lead = [...adjacentAttackers].sort((a, b) => currentPower(b) - currentPower(a))[0];
-            drAdvanceOffer = { attackerId: lead.id, hex: vacatedPos };
-          }
           text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
         } else {
           const r = applyCasualty(units, defender.id);
@@ -388,8 +382,14 @@ export function gameReducer(state: GameState, action: Action): GameState {
       };
       next = addLog(next, text, "combat");
 
-      if (drAdvanceOffer) {
-        return { ...next, pendingAdvance: drAdvanceOffer };
+      // Whenever the defender's hex ends up empty — it retreated, or it was eliminated — a
+      // surviving adjacent attacker may take the ground.
+      const vacatedKey = hexKey(defender.pos);
+      const hexNowEmpty = !Object.values(units).some((u) => hexKey(u.pos) === vacatedKey);
+      const survivingAdjacent = adjacentAttackers.filter((a) => units[a.id]);
+      if (hexNowEmpty && survivingAdjacent.length) {
+        const lead = [...survivingAdjacent].sort((a, b) => currentPower(units[b.id]) - currentPower(units[a.id]))[0];
+        return { ...next, pendingAdvance: { attackerId: lead.id, hex: defender.pos } };
       }
       if (result === "Ar" && !bombardingOnly) {
         next = beginRetreats(next, adjacentAttackers.map((a) => a.id), defender.pos);
@@ -577,4 +577,46 @@ function finalizeAiTurn(state: GameState): GameState {
   next = { ...next, turn: nextTurn, phase: "player-resupply", aiTurnState: null };
   next = addLog(next, `Turn ${nextTurn} begins — resupply first.`, "info");
   return next;
+}
+
+// --- Undo ---------------------------------------------------------------------------------
+// Movement and resupply can be taken back, step by step, as far as the start of your turn.
+// Combat cannot: confirming an attack commits the roll and wipes the history, so nobody can
+// rewind a bad result and re-roll it. Handing the turn to the Coalition wipes it too.
+
+export interface UndoableState {
+  present: GameState;
+  past: GameState[];
+}
+
+export type UndoableAction = Action | { type: "UNDO" };
+
+/** Actions that leave a restore point behind them. */
+const UNDOABLE = new Set<Action["type"]>(["MOVE_UNIT", "RESUPPLY_FLIP", "RESUPPLY_PLACE", "END_PHASE"]);
+/** Actions that commit the game past the point of taking anything back. */
+const IRREVERSIBLE = new Set<Action["type"]>(["CONFIRM_ATTACK", "ADVANCE_AI_STEP", "SKIP_AI_TURN", "RESET"]);
+
+const MAX_HISTORY = 60;
+
+export function initUndoableState(): UndoableState {
+  return { present: initGameState(), past: [] };
+}
+
+export function undoableReducer(state: UndoableState, action: UndoableAction): UndoableState {
+  if (action.type === "UNDO") {
+    if (!state.past.length) return state;
+    const past = [...state.past];
+    const present = past.pop()!;
+    return { present, past };
+  }
+
+  const next = gameReducer(state.present, action);
+  if (next === state.present) return state; // rejected or no-op, nothing to record
+
+  if (IRREVERSIBLE.has(action.type)) return { present: next, past: [] };
+  if (!UNDOABLE.has(action.type)) return { present: next, past: state.past };
+  // Ending the movement phase hands over to the Coalition — that's a one-way door.
+  if (next.phase === "ai-turn") return { present: next, past: [] };
+
+  return { present: next, past: [...state.past, state.present].slice(-MAX_HISTORY) };
 }

@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { hexDistance, hexKey } from "@/lib/hex";
-import { oddsColumnFor } from "@/lib/combat";
+import { oddsColumnFor, type OddsColumn } from "@/lib/combat";
 import { TERRAIN_DEFS } from "@/lib/mapData";
-import { currentPower, defensePower, unitDisplayName } from "@/lib/units";
+import { UNIT_TYPES, currentPower, defensePower, defenseValue, unitDisplayName } from "@/lib/units";
 import type { GameState } from "@/lib/types";
+import CrtTable from "./CrtTable";
 
 function terrainMultiplier(state: GameState, pos: { col: number; row: number }): number {
   const tile = state.map[hexKey(pos)];
@@ -20,9 +22,32 @@ export default function CombatPreview({
   onConfirm: () => void;
   onClear: () => void;
 }) {
-  if (!state.combatTargetId) {
+  const [showCrt, setShowCrt] = useState(false);
+
+  function frame(children: React.ReactNode, odds?: OddsColumn, border = "border-[#3a2f1c]") {
     return (
-      <div className="rounded-lg border border-[#3a2f1c] bg-[#17130c] px-4 py-3 text-sm text-[#8a7f63]">
+      <div className={`rounded-lg border ${border} bg-[#17130c] px-4 py-3 flex flex-col gap-2`}>
+        {children}
+        <div className="flex items-center">
+          <button
+            onClick={() => setShowCrt((v) => !v)}
+            className="text-[11px] text-[#8a7f63] hover:text-[#f4d35e] transition underline decoration-dotted underline-offset-2"
+          >
+            {showCrt ? "Hide combat results table" : "🎲 Check combat results table"}
+          </button>
+        </div>
+        {showCrt && (
+          <div className="rounded-md border border-[#3a2f1c] bg-[#0f0c07] px-3 py-2">
+            <CrtTable highlightOdds={odds} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!state.combatTargetId) {
+    return frame(
+      <div className="text-sm text-[#8a7f63]">
         Click an enemy unit to target it, then click your own units in range to commit them to the attack.
       </div>
     );
@@ -32,19 +57,23 @@ export default function CombatPreview({
   if (!target) return null;
   const attackers = state.combatAttackerIds.map((id) => state.units[id]).filter(Boolean);
   const targetName = unitDisplayName(state.aiFaction, target.kind);
-  const defPower = defensePower(currentPower(target), terrainMultiplier(state, target.pos));
+  const defPower = defensePower(defenseValue(target), terrainMultiplier(state, target.pos));
   const bombardingOnly = attackers.length > 0 && attackers.every((u) => hexDistance(u.pos, target.pos) > 1);
+  const gunsDugIn = target.kind === "artillery";
 
   if (!attackers.length) {
-    return (
-      <div className="rounded-lg border border-[#f4d35e] bg-[#17130c] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+    return frame(
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm text-[#cbbf9c]">
-          Targeting <span className="text-[#f4d35e] font-bold">{targetName}</span> ({defPower} power) — click your units in range to commit them.
+          Targeting <span className="text-[#f4d35e] font-bold">{targetName}</span> (defends at {defPower}
+          {gunsDugIn ? ", guns always defend at 2" : ""}) — click your units in range to commit them.
         </div>
         <button onClick={onClear} className="text-xs text-[#8a7f63] hover:text-[#cbbf9c] transition">
           Clear target
         </button>
-      </div>
+      </div>,
+      undefined,
+      "border-[#f4d35e]"
     );
   }
 
@@ -52,15 +81,16 @@ export default function CombatPreview({
   const odds = oddsColumnFor(atkPower, defPower);
   const names = attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)).join(", ");
 
-  return (
-    <div className="rounded-lg border-2 border-[#f4d35e] bg-[#17130c] px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+  return frame(
+    <>
       <div className="text-sm text-[#cbbf9c]">
         <span className="text-[#f4d35e] font-bold">{names}</span> ({atkPower} power) vs.{" "}
-        <span className="text-[#d5595c] font-bold">{targetName}</span> ({defPower} power) — Odds{" "}
+        <span className="text-[#d5595c] font-bold">{targetName}</span> (defends at {defPower}
+        {gunsDugIn ? " — guns always defend at 2" : ""}) — Odds{" "}
         <span className="font-black text-[#f4d35e]">{odds}</span>
         {bombardingOnly && <span className="text-[#8a7f63]"> (bombarding — can't be eliminated or forced back by this attack)</span>}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-end gap-3">
         <button onClick={onClear} className="text-xs text-[#8a7f63] hover:text-[#cbbf9c] transition">
           Cancel
         </button>
@@ -71,6 +101,8 @@ export default function CombatPreview({
           ⚔ Attack ({odds})
         </button>
       </div>
-    </div>
+    </>,
+    odds,
+    "border-[#f4d35e] border-2"
   );
 }
