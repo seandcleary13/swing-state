@@ -28,15 +28,17 @@ const CRT: Record<OddsColumn, CombatResult[]> = {
   "5:1": ["EX", "DE", "DE", "DE", "DE", "DE"],
 };
 
+// Odds always round down toward the defender's favor — a ratio only reaches a column
+// once it actually meets that threshold (e.g. 1.8 stays "1:1", it does not round up to "2:1").
 export function oddsColumnFor(attack: number, defense: number): OddsColumn {
   const ratio = attack / Math.max(defense, 0.5);
-  if (ratio < 0.4) return "1:3";
-  if (ratio < 0.75) return "1:2";
-  if (ratio < 1.5) return "1:1";
-  if (ratio < 2.5) return "2:1";
-  if (ratio < 3.5) return "3:1";
-  if (ratio < 4.5) return "4:1";
-  return "5:1";
+  if (ratio >= 5) return "5:1";
+  if (ratio >= 4) return "4:1";
+  if (ratio >= 3) return "3:1";
+  if (ratio >= 2) return "2:1";
+  if (ratio >= 1) return "1:1";
+  if (ratio >= 0.5) return "1:2";
+  return "1:3";
 }
 
 export function rollCombat(attack: number, defense: number, roll: number): { odds: OddsColumn; result: CombatResult } {

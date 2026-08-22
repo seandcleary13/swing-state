@@ -7,6 +7,7 @@ const PHASE_LABEL: Record<string, string> = {
   "player-cavalry-move": "1. Cavalry Moves",
   "player-combat": "2. Announce Attacks",
   "player-move": "3. All Units Move",
+  "ai-turn": "— Coalition Turn —",
   "game-over": "Campaign Over",
 };
 
@@ -20,7 +21,15 @@ function townCount(state: GameState, faction: "france" | "coalition") {
   return Object.values(state.map).filter((t) => t.objective && t.controlledBy === faction).length;
 }
 
-export default function TurnBanner({ state, onEndPhase }: { state: GameState; onEndPhase: () => void }) {
+export default function TurnBanner({
+  state,
+  onEndPhase,
+  onSkip,
+}: {
+  state: GameState;
+  onEndPhase: () => void;
+  onSkip: () => void;
+}) {
   const totalTowns = Object.values(state.map).filter((t) => t.objective).length;
   const franceTowns = townCount(state, "france");
   const coalitionTowns = townCount(state, "coalition");
@@ -49,6 +58,14 @@ export default function TurnBanner({ state, onEndPhase }: { state: GameState; on
             className="px-4 py-2 rounded-md font-black text-sm tracking-wide bg-gradient-to-b from-[#d4a94a] to-[#a87d2c] text-[#1a1608] hover:brightness-110 transition"
           >
             {PHASE_BUTTON_LABEL[state.phase]}
+          </button>
+        )}
+        {state.phase === "ai-turn" && (
+          <button
+            onClick={onSkip}
+            className="px-4 py-2 rounded-md font-black text-sm tracking-wide border border-[#8a7f63] text-[#cbbf9c] hover:bg-[#3a2f1c] transition"
+          >
+            Skip ⏭
           </button>
         )}
       </div>

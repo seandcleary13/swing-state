@@ -54,6 +54,7 @@ export type GamePhase =
   | "player-cavalry-move"
   | "player-combat"
   | "player-move"
+  | "ai-turn"
   | "game-over";
 
 export interface CombatLogEntry {
@@ -71,6 +72,19 @@ export interface PendingRetreat {
   awayFrom: HexCoord;
   stepsTaken: number;
   queue: string[]; // remaining unit ids that still need to retreat after this one
+}
+
+/** Offered after a Defender Retreat the player's own attack caused: advance into the vacated hex, or hold. */
+export interface PendingAdvance {
+  attackerId: string;
+  hex: HexCoord;
+}
+
+/** Drives the Coalition's turn one step at a time instead of resolving it all at once. */
+export interface AiTurnState {
+  subPhase: "cavalry" | "combat" | "move";
+  queue: string[];
+  pendingAutoAdvance: { attackerId: string; hex: HexCoord } | null;
 }
 
 export interface GameState {
@@ -92,6 +106,10 @@ export interface GameState {
   /** Interactive attacker-retreat: set while the player is choosing where their falling-back units go. */
   pendingRetreat: PendingRetreat | null;
   retreatOptions: Record<string, true>;
+  /** Offered after the player's own attack forces a Defender Retreat: advance into the vacated hex, or hold. */
+  pendingAdvance: PendingAdvance | null;
+  /** Non-null only during phase "ai-turn": drives the Coalition's turn one step at a time. */
+  aiTurnState: AiTurnState | null;
   log: CombatLogEntry[];
   setupPool: Record<Faction, UnitKind[]>; // remaining units to deploy
   winner: Faction | "draw" | null;

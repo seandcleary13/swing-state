@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useReducer, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { gameReducer, getObligatedAttackerIds, initGameState } from "@/lib/gameEngine";
 import { hexDistance, hexKey, type HexCoord } from "@/lib/hex";
 import { unitAt } from "@/lib/movement";
@@ -13,9 +13,12 @@ import UnitInfoPanel from "./UnitInfoPanel";
 import CombatLog from "./CombatLog";
 import CombatPreview from "./CombatPreview";
 import RetreatPrompt from "./RetreatPrompt";
+import AdvancePrompt from "./AdvancePrompt";
 import VictoryModal from "./VictoryModal";
 import RulesPanel from "./RulesPanel";
 import { cn } from "@/lib/utils";
+
+const AI_STEP_DELAY_MS = 600;
 
 export default function WarGame() {
   const [state, dispatch] = useReducer(gameReducer, undefined, initGameState);
@@ -54,6 +57,14 @@ export default function WarGame() {
   // Units with a live enemy in range that haven't attacked yet — must fight before the phase can end.
   const obligatedAttackerIds = useMemo(() => getObligatedAttackerIds(state), [state]);
 
+  // Steps the Coalition's turn forward on a timer, pausing whenever an interactive retreat
+  // choice is handed to the player mid-turn.
+  useEffect(() => {
+    if (state.phase !== "ai-turn" || state.pendingRetreat) return;
+    const t = setTimeout(() => dispatch({ type: "ADVANCE_AI_STEP" }), AI_STEP_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [state]);
+
   function handleHexClick(hex: HexCoord) {
     const key = hexKey(hex);
     const tile = state.map[key];
@@ -63,6 +74,8 @@ export default function WarGame() {
       if (key in state.retreatOptions) dispatch({ type: "CHOOSE_RETREAT_HEX", hex });
       return;
     }
+
+    if (state.pendingAdvance) return;
 
     if (state.phase === "setup") {
       if (pendingKind && tile?.deploymentFor === "france" && !occ) {
@@ -134,22 +147,31 @@ export default function WarGame() {
           <RulesPanel />
         ) : (
           <>
-            <TurnBanner state={state} onEndPhase={() => dispatch({ type: "END_PHASE" })} />
+            <TurnBanner
+              state={state}
+              onEndPhase={() => dispatch({ type: "END_PHASE" })}
+              onSkip={() => dispatch({ type: "SKIP_AI_TURN" })}
+            />
 
             {state.phase === "setup" && (
               <SetupTray pool={state.setupPool.france} pending={pendingKind} onSelect={setPendingKind} />
             )}
 
-            {state.phase === "player-combat" &&
-              (state.pendingRetreat ? (
-                <RetreatPrompt state={state} />
-              ) : (
-                <CombatPreview
-                  state={state}
-                  onConfirm={() => dispatch({ type: "CONFIRM_ATTACK" })}
-                  onClear={() => dispatch({ type: "CLEAR_ATTACK" })}
-                />
-              ))}
+            {state.pendingRetreat ? (
+              <RetreatPrompt state={state} onStop={() => dispatch({ type: "STOP_RETREAT" })} />
+            ) : state.pendingAdvance ? (
+              <AdvancePrompt
+                state={state}
+                onConfirm={() => dispatch({ type: "CONFIRM_ADVANCE" })}
+                onDecline={() => dispatch({ type: "DECLINE_ADVANCE" })}
+              />
+            ) : state.phase === "player-combat" ? (
+              <CombatPreview
+                state={state}
+                onConfirm={() => dispatch({ type: "CONFIRM_ATTACK" })}
+                onClear={() => dispatch({ type: "CLEAR_ATTACK" })}
+              />
+            ) : null}
 
             <div className="rounded-lg border border-[#3a2f1c] bg-[#0f0c07] p-2">
               <HexGrid

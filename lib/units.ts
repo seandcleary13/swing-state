@@ -40,7 +40,7 @@ export function attackRange(kind: UnitKind, attackerOnHill: boolean): number {
 
 // Terrain multiplies a defender's Power rather than adding a flat bonus, so it scales with the unit's own strength.
 export function defensePower(basePower: number, terrainMultiplier: number): number {
-  return Math.round(basePower * terrainMultiplier);
+  return Math.floor(basePower * terrainMultiplier);
 }
 
 // Order of battle for each side — 9 units, small tutorial-scale scenario.

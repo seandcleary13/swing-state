@@ -19,7 +19,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🎲 Combat Results Table",
-    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out. Any retreat covers 2 hexes; if there's nowhere to go, the unit is eliminated instead. When YOUR units are forced to retreat, you choose the direction yourself, one hex at a time. When a defender retreats, the strongest attacking unit that was directly adjacent to it advances into the ground it just vacated.",
+    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Odds always round down in the defender's favor — a ratio has to actually clear a threshold to reach the next column (1.8:1 stays 1:1, it doesn't round up to 2:1). Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out.",
+  },
+  {
+    title: "🏃 Retreats",
+    body: "Whichever side owns the retreating unit chooses its path, one hex at a time, up to 3 hexes — you're never forced to use the full distance, and can stop early with the \"Stop Retreating\" button once you've fallen back at least one hex. If there's nowhere at all to go, the unit is eliminated instead. When your own attack forces a Defender Retreat, you get to choose whether the attacking unit advances into the vacated ground or holds its position.",
   },
   {
     title: "🎯 Bombarding Artillery",
@@ -28,6 +32,10 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: "🚶 3. All Units Move",
     body: "Every unit — including Cavalry a second time — may move once more, repositioning after the fighting. This is the only movement Infantry and Artillery get each turn; Cavalry gets this move on top of its earlier advance, giving it two moves in a single turn. Once you end this phase, it becomes the Coalition's turn.",
+  },
+  {
+    title: "🇦🇹 The Coalition's Turn",
+    body: "The Coalition plays out its turn step by step — you'll see its cavalry advance, then its attacks resolve one at a time, then its units reposition, each appearing in the log as it happens. Tap \"Skip\" to fast-forward through it. If a Coalition attack forces one of your own units to retreat, play pauses so you can choose that unit's retreat path yourself, just like on your turn.",
   },
   {
     title: "🗺 Terrain",

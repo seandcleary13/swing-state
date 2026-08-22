@@ -2,16 +2,15 @@ import { hexDistance, hexKey, type HexCoord } from "./hex";
 import { TERRAIN_DEFS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
-import { computeRetreat, retreatStepOptions } from "./retreat";
+import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
+import { addLog } from "./log";
 import { ORDER_OF_BATTLE, UNIT_TYPES, attackRange, defensePower, isCavalryKind, unitDisplayName } from "./units";
-import { runAiTurn } from "./ai";
-import type { CombatLogEntry, Faction, GameState, PendingRetreat, Unit, UnitKind } from "./types";
+import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat } from "./ai";
+import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
 
 const COALITION_DEPLOY: Array<[number, number]> = [
   [12, 1], [11, 2], [12, 4], [11, 5], [12, 7], [11, 8], [12, 10], [11, 11], [12, 12],
 ];
-
-const RETREAT_HEXES = 2;
 
 function isOnHill(state: GameState, pos: HexCoord): boolean {
   return state.map[hexKey(pos)]?.terrain === "hill";
@@ -47,32 +46,30 @@ export function getObligatedAttackerIds(state: GameState): Set<string> {
 }
 
 /**
- * Pops units off `queue` one at a time, auto-eliminating any with nowhere at all to
- * retreat to, until it finds one with real options (left as the active `pendingRetreat`)
- * or the queue runs out (retreat sequence finished, `pendingRetreat` cleared).
+ * After a retreat queue drains (`pendingRetreat` clears), either apply the AI's own
+ * automatic advance into ground its attack vacated and leave `aiTurnState` for the next
+ * step to resume (during the Coalition's turn), or run the normal end-of-combat checks
+ * (during the player's turn).
  */
-function beginRetreats(state: GameState, unitIds: string[], awayFrom: HexCoord): GameState {
-  let working = state;
-  const queue = [...unitIds];
-  while (queue.length) {
-    const id = queue.shift()!;
-    const unit = working.units[id];
-    if (!unit) continue;
-    const options = retreatStepOptions(working, unit.pos, awayFrom);
-    if (!options.length) {
-      const { [id]: _drop, ...rest } = working.units;
-      working = addLog(
-        { ...working, units: rest },
-        `${unitDisplayName(working.playerFaction, unit.kind)} has nowhere to fall back and is eliminated.`,
-        "combat"
-      );
-      continue;
+function resolveRetreatQueueAdvance(state: GameState, queue: string[], awayFrom: HexCoord): GameState {
+  let next = beginRetreats(state, queue, awayFrom);
+  if (next.pendingRetreat) return next;
+
+  if (next.phase === "ai-turn") {
+    const auto = next.aiTurnState?.pendingAutoAdvance;
+    if (auto && next.units[auto.attackerId]) {
+      next = recomputeObjectiveControl({
+        ...next,
+        units: { ...next.units, [auto.attackerId]: { ...next.units[auto.attackerId], pos: auto.hex } },
+      });
     }
-    const retreatOptions: Record<string, true> = {};
-    for (const o of options) retreatOptions[hexKey(o)] = true;
-    return { ...working, pendingRetreat: { unitId: id, awayFrom, stepsTaken: 0, queue }, retreatOptions };
+    if (next.aiTurnState) {
+      next = { ...next, aiTurnState: { ...next.aiTurnState, pendingAutoAdvance: null } };
+    }
+    return next;
   }
-  return { ...working, pendingRetreat: null, retreatOptions: {} };
+
+  return finalizeCombatOutcome(next);
 }
 
 function finalizeCombatOutcome(state: GameState): GameState {
@@ -120,11 +117,6 @@ function finalizeVictory(state: GameState, winner: Faction, reason: GameState["v
   return { ...state, phase: "game-over", winner, victoryReason: reason };
 }
 
-function addLog(state: GameState, text: string, kind: CombatLogEntry["kind"] = "info"): GameState {
-  const entry: CombatLogEntry = { id: `${Date.now()}-${Math.random()}`, turn: state.turn, text, kind };
-  return { ...state, log: [entry, ...state.log].slice(0, 40) };
-}
-
 export function initGameState(): GameState {
   const map = buildMap();
   // The Coalition defends and starts already holding every town.
@@ -155,6 +147,8 @@ export function initGameState(): GameState {
     combatAttackerIds: [],
     pendingRetreat: null,
     retreatOptions: {},
+    pendingAdvance: null,
+    aiTurnState: null,
     log: [
       {
         id: "start",
@@ -178,13 +172,24 @@ export type Action =
   | { type: "CLEAR_ATTACK" }
   | { type: "CONFIRM_ATTACK" }
   | { type: "CHOOSE_RETREAT_HEX"; hex: HexCoord }
+  | { type: "STOP_RETREAT" }
+  | { type: "CONFIRM_ADVANCE" }
+  | { type: "DECLINE_ADVANCE" }
   | { type: "END_PHASE" }
+  | { type: "ADVANCE_AI_STEP" }
+  | { type: "SKIP_AI_TURN" }
   | { type: "RESET" };
 
 export function gameReducer(state: GameState, action: Action): GameState {
-  // While an attacker retreat is being interactively resolved, every other action is
-  // blocked until the player finishes choosing where those units fall back to.
-  if (state.pendingRetreat && action.type !== "CHOOSE_RETREAT_HEX" && action.type !== "RESET") return state;
+  // While a retreat is being interactively resolved, every other action is blocked until
+  // the player finishes choosing where those units fall back to.
+  if (state.pendingRetreat && action.type !== "CHOOSE_RETREAT_HEX" && action.type !== "STOP_RETREAT" && action.type !== "RESET") {
+    return state;
+  }
+  // While the player is deciding whether to advance into vacated ground, block everything else.
+  if (state.pendingAdvance && action.type !== "CONFIRM_ADVANCE" && action.type !== "DECLINE_ADVANCE" && action.type !== "RESET") {
+    return state;
+  }
 
   switch (action.type) {
     case "RESET":
@@ -305,6 +310,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       for (const a of attackers) units[a.id] = { ...units[a.id], hasAttacked: true };
 
       let text = "";
+      let drAdvanceOffer: { attackerId: string; hex: HexCoord } | null = null;
       if (result === "NE") {
         text = `${attackerNames} attack ${defenderName} at ${odds} — no effect (roll ${roll}).`;
       } else if (result === "AE") {
@@ -328,12 +334,12 @@ export function gameReducer(state: GameState, action: Action): GameState {
         }
       } else if (result === "DR") {
         const vacatedPos = defender.pos;
-        const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), RETREAT_HEXES);
+        const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), MAX_RETREAT_HEXES);
         if (retreat) {
           units[defender.id] = { ...defender, pos: retreat, routed: true };
           if (adjacentAttackers.length) {
             const lead = [...adjacentAttackers].sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power)[0];
-            units[lead.id] = { ...units[lead.id], pos: vacatedPos };
+            drAdvanceOffer = { attackerId: lead.id, hex: vacatedPos };
           }
           text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
         } else {
@@ -355,6 +361,9 @@ export function gameReducer(state: GameState, action: Action): GameState {
       };
       next = addLog(next, text, "combat");
 
+      if (drAdvanceOffer) {
+        return { ...next, pendingAdvance: drAdvanceOffer };
+      }
       if (result === "Ar" && !bombardingOnly) {
         next = beginRetreats(next, adjacentAttackers.map((a) => a.id), defender.pos);
         return next.pendingRetreat ? next : finalizeCombatOutcome(next);
@@ -372,10 +381,10 @@ export function gameReducer(state: GameState, action: Action): GameState {
 
       const units = { ...state.units, [unitId]: { ...unit, pos: action.hex, routed: true } };
       let next: GameState = { ...state, units };
-      next = addLog(next, `${unitDisplayName(next.playerFaction, unit.kind)} falls back.`, "combat");
+      next = addLog(next, `${unitDisplayName(unit.faction, unit.kind)} falls back.`, "combat");
 
       const stepsSoFar = stepsTaken + 1;
-      if (stepsSoFar < RETREAT_HEXES) {
+      if (stepsSoFar < MAX_RETREAT_HEXES) {
         const moreOptions = retreatStepOptions(next, action.hex, awayFrom);
         if (moreOptions.length) {
           const retreatOptions: Record<string, true> = {};
@@ -384,8 +393,30 @@ export function gameReducer(state: GameState, action: Action): GameState {
         }
       }
 
-      next = beginRetreats(next, queue, awayFrom);
-      return next.pendingRetreat ? next : finalizeCombatOutcome(next);
+      return resolveRetreatQueueAdvance(next, queue, awayFrom);
+    }
+
+    case "STOP_RETREAT": {
+      if (!state.pendingRetreat) return state;
+      if (state.pendingRetreat.stepsTaken < 1) return state;
+      const { queue, awayFrom } = state.pendingRetreat;
+      return resolveRetreatQueueAdvance(state, queue, awayFrom);
+    }
+
+    case "CONFIRM_ADVANCE": {
+      if (!state.pendingAdvance) return state;
+      const { attackerId, hex } = state.pendingAdvance;
+      const unit = state.units[attackerId];
+      if (!unit) return finalizeCombatOutcome({ ...state, pendingAdvance: null });
+      const units = { ...state.units, [attackerId]: { ...unit, pos: hex } };
+      let next: GameState = { ...state, units, pendingAdvance: null };
+      next = addLog(next, `${unitDisplayName(unit.faction, unit.kind)} advances into the vacated ground.`, "combat");
+      return finalizeCombatOutcome(next);
+    }
+
+    case "DECLINE_ADVANCE": {
+      if (!state.pendingAdvance) return state;
+      return finalizeCombatOutcome({ ...state, pendingAdvance: null });
     }
 
     case "END_PHASE": {
@@ -414,30 +445,102 @@ export function gameReducer(state: GameState, action: Action): GameState {
         }
 
         let next = addLog({ ...state, selectedUnitId: null, reachable: {} }, "— The Coalition responds —", "info");
-        next = runAiTurn(next);
-
-        const attackerAlive = Object.values(next.units).some((u) => u.faction === next.attackerFaction);
-        if (!attackerAlive) {
-          next = addLog(next, "The Grande Armée has been wiped out — the Coalition holds the field!", "victory");
-          return finalizeVictory(next, next.defenderFaction, "annihilation-attacker");
-        }
-
-        const nextTurn = next.turn + 1;
-        if (nextTurn > next.totalTurns) {
-          next = addLog(next, "The campaign clock runs out — the Coalition has held out!", "victory");
-          return finalizeVictory(next, next.defenderFaction, "held-out");
-        }
-
-        next = resetFactionFlags(next, next.playerFaction);
-        next = { ...next, turn: nextTurn, phase: "player-cavalry-move" };
-        next = addLog(next, `Turn ${nextTurn} begins — cavalry advances first.`, "info");
+        next = resetFactionFlags(next, next.aiFaction);
+        next = {
+          ...next,
+          phase: "ai-turn",
+          aiTurnState: { subPhase: "cavalry", queue: buildCavalryQueue(next), pendingAutoAdvance: null },
+        };
         return next;
       }
 
       return state;
     }
 
+    case "ADVANCE_AI_STEP": {
+      if (state.phase !== "ai-turn" || !state.aiTurnState) return state;
+      return advanceAiTurnOnce(state);
+    }
+
+    case "SKIP_AI_TURN": {
+      if (state.phase !== "ai-turn" || !state.aiTurnState) return state;
+      let working = state;
+      const cap = Object.keys(state.units).length * 6 + 20;
+      for (let i = 0; i < cap; i++) {
+        if (working.phase !== "ai-turn" || !working.aiTurnState || working.pendingRetreat) break;
+        working = advanceAiTurnOnce(working);
+      }
+      return working;
+    }
+
     default:
       return state;
   }
+}
+
+/**
+ * Advances the Coalition's turn by one visible step: pops queued units and applies their
+ * move/attack, skipping any with nothing to do within the same call (so the visible pacing
+ * only pauses on a real move, combat roll, or an interactive retreat it needs to hand off
+ * to the player). Sub-phases run cavalry → combat → move, then hand off to `finalizeAiTurn`.
+ */
+function advanceAiTurnOnce(state: GameState): GameState {
+  let working = state;
+
+  while (working.aiTurnState) {
+    const ats: AiTurnState = working.aiTurnState;
+
+    if (ats.queue.length === 0) {
+      if (ats.subPhase === "cavalry") {
+        working = { ...working, aiTurnState: { subPhase: "combat", queue: buildCombatQueue(working), pendingAutoAdvance: null } };
+        continue;
+      }
+      if (ats.subPhase === "combat") {
+        working = { ...working, aiTurnState: { subPhase: "move", queue: buildMoveQueue(working), pendingAutoAdvance: null } };
+        continue;
+      }
+      return finalizeAiTurn(working);
+    }
+
+    const unitId = ats.queue[0];
+    const restQueue = ats.queue.slice(1);
+    const before = working.units;
+
+    if (ats.subPhase === "cavalry" || ats.subPhase === "move") {
+      const moveFlag = ats.subPhase === "cavalry" ? "hasCavalryMoved" : "hasMoved";
+      const after = stepAdvance(working, unitId, moveFlag, ats.subPhase === "cavalry");
+      working = { ...after, aiTurnState: { ...(after.aiTurnState ?? ats), queue: restQueue } };
+      if (after.units !== before) return working;
+      continue;
+    }
+
+    // combat
+    const after = stepCombat(working, unitId);
+    working = { ...after, aiTurnState: after.aiTurnState ? { ...after.aiTurnState, queue: restQueue } : { ...ats, queue: restQueue } };
+    if (working.pendingRetreat) return working;
+    if (after.units !== before) return working;
+  }
+
+  return working;
+}
+
+function finalizeAiTurn(state: GameState): GameState {
+  let next = recomputeObjectiveControl(state);
+
+  const attackerAlive = Object.values(next.units).some((u) => u.faction === next.attackerFaction);
+  if (!attackerAlive) {
+    next = addLog(next, "The Grande Armée has been wiped out — the Coalition holds the field!", "victory");
+    return finalizeVictory({ ...next, aiTurnState: null }, next.defenderFaction, "annihilation-attacker");
+  }
+
+  const nextTurn = next.turn + 1;
+  if (nextTurn > next.totalTurns) {
+    next = addLog(next, "The campaign clock runs out — the Coalition has held out!", "victory");
+    return finalizeVictory({ ...next, aiTurnState: null }, next.defenderFaction, "held-out");
+  }
+
+  next = resetFactionFlags(next, next.playerFaction);
+  next = { ...next, turn: nextTurn, phase: "player-cavalry-move", aiTurnState: null };
+  next = addLog(next, `Turn ${nextTurn} begins — cavalry advances first.`, "info");
+  return next;
 }

@@ -1,6 +1,10 @@
 import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { unitAt } from "./movement";
+import { addLog } from "./log";
+import { unitDisplayName } from "./units";
 import type { GameState } from "./types";
+
+export const MAX_RETREAT_HEXES = 3;
 
 /**
  * Retreats a defender up to `steps` hexes away from the nearest attacking unit.
@@ -53,4 +57,33 @@ export function retreatStepOptions(state: GameState, currentPos: HexCoord, awayF
     if (unitAt(state.units, n)) return false;
     return hexDistance(n, awayFrom) > currentDist;
   });
+}
+
+/**
+ * Pops units off `queue` one at a time, auto-eliminating any with nowhere at all to
+ * retreat to, until it finds one with real options (left as the active `pendingRetreat`)
+ * or the queue runs out (retreat sequence finished, `pendingRetreat` cleared).
+ */
+export function beginRetreats(state: GameState, unitIds: string[], awayFrom: HexCoord): GameState {
+  let working = state;
+  const queue = [...unitIds];
+  while (queue.length) {
+    const id = queue.shift()!;
+    const unit = working.units[id];
+    if (!unit) continue;
+    const options = retreatStepOptions(working, unit.pos, awayFrom);
+    if (!options.length) {
+      const { [id]: _drop, ...rest } = working.units;
+      working = addLog(
+        { ...working, units: rest },
+        `${unitDisplayName(unit.faction, unit.kind)} has nowhere to fall back and is eliminated.`,
+        "combat"
+      );
+      continue;
+    }
+    const retreatOptions: Record<string, true> = {};
+    for (const o of options) retreatOptions[hexKey(o)] = true;
+    return { ...working, pendingRetreat: { unitId: id, awayFrom, stepsTaken: 0, queue }, retreatOptions };
+  }
+  return { ...working, pendingRetreat: null, retreatOptions: {} };
 }
