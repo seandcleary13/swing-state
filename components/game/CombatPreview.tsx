@@ -3,7 +3,7 @@
 import { hexDistance, hexKey } from "@/lib/hex";
 import { oddsColumnFor } from "@/lib/combat";
 import { TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES, defensePower, unitDisplayName } from "@/lib/units";
+import { currentPower, defensePower, unitDisplayName } from "@/lib/units";
 import type { GameState } from "@/lib/types";
 
 function terrainMultiplier(state: GameState, pos: { col: number; row: number }): number {
@@ -32,7 +32,7 @@ export default function CombatPreview({
   if (!target) return null;
   const attackers = state.combatAttackerIds.map((id) => state.units[id]).filter(Boolean);
   const targetName = unitDisplayName(state.aiFaction, target.kind);
-  const defPower = defensePower(UNIT_TYPES[target.kind].power, terrainMultiplier(state, target.pos));
+  const defPower = defensePower(currentPower(target), terrainMultiplier(state, target.pos));
   const bombardingOnly = attackers.length > 0 && attackers.every((u) => hexDistance(u.pos, target.pos) > 1);
 
   if (!attackers.length) {
@@ -48,7 +48,7 @@ export default function CombatPreview({
     );
   }
 
-  const atkPower = attackers.reduce((sum, u) => sum + UNIT_TYPES[u.kind].power, 0);
+  const atkPower = attackers.reduce((sum, u) => sum + currentPower(u), 0);
   const odds = oddsColumnFor(atkPower, defPower);
   const names = attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)).join(", ");
 

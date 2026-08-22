@@ -46,6 +46,10 @@ export interface Unit {
   hasMoved: boolean; // consumed by the general movement phase (every unit type, incl. cavalry again)
   hasAttacked: boolean;
   routed: boolean; // retreated this turn, disordered until its side's next cavalry-move phase
+  // Took a first casualty result and now fights at half base power; a second such hit
+  // eliminates it. Persistent battlefield damage, not a per-turn flag — never cleared by
+  // resetFactionFlags, only removed by taking the unit off the board entirely.
+  reduced: boolean;
 }
 
 // Turn order: cavalry advances alone, then everyone fights, then everyone (incl. cavalry again) repositions.

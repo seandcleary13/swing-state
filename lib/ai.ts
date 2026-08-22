@@ -4,8 +4,13 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { UNIT_TYPES, attackRange, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import type { CasualtyOutcome } from "./units";
 import type { Faction, GameState, Unit } from "./types";
+
+function casualtyPhrase(outcome: CasualtyOutcome): string {
+  return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
+}
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -94,8 +99,8 @@ export function stepAdvance(
       .map((n) => unitAt(state.units, n))
       .filter((u): u is Unit => !!u && u.faction === playerFaction);
     const goodFight = adjEnemies.some((e) => {
-      const atk = UNIT_TYPES[live.kind].power;
-      const def = defensePower(UNIT_TYPES[e.kind].power, terrainMultiplier(state, e.pos));
+      const atk = currentPower(live);
+      const def = defensePower(currentPower(e), terrainMultiplier(state, e.pos));
       return atk / Math.max(def, 0.5) >= 1;
     });
     if (goodFight) return state; // stay and fight this combat phase
@@ -139,8 +144,8 @@ export function stepCombat(state: GameState, unitId: string): GameState {
   let bestTarget: Unit | null = null;
   let bestRatio = -Infinity;
   for (const t of targets) {
-    const atk = UNIT_TYPES[live.kind].power;
-    const def = defensePower(UNIT_TYPES[t.kind].power, terrainMultiplier(state, t.pos));
+    const atk = currentPower(live);
+    const def = defensePower(currentPower(t), terrainMultiplier(state, t.pos));
     const ratio = atk / Math.max(def, 0.5);
     if (ratio > bestRatio) {
       bestRatio = ratio;
@@ -153,8 +158,8 @@ export function stepCombat(state: GameState, unitId: string): GameState {
 
   const attackerName = unitDisplayName(aiFaction, live.kind);
   const defenderName = unitDisplayName(playerFaction, bestTarget.kind);
-  const atk = UNIT_TYPES[live.kind].power;
-  const def = defensePower(UNIT_TYPES[bestTarget.kind].power, terrainMultiplier(state, bestTarget.pos));
+  const atk = currentPower(live);
+  const def = defensePower(currentPower(bestTarget), terrainMultiplier(state, bestTarget.pos));
   const roll = randomInt(1, 6);
   const { odds, result } = rollCombat(atk, def, roll);
   const wasAdjacent = hexDistance(live.pos, bestTarget.pos) === 1;
@@ -174,8 +179,8 @@ export function stepCombat(state: GameState, unitId: string): GameState {
     if (bombarding) {
       next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`, "combat");
     } else {
-      const { [live.id]: _drop, ...rest } = next.units;
-      next = addLog({ ...next, units: rest }, `${attackerName} attacks ${defenderName} at ${odds} — attacker eliminated (roll ${roll}).`, "combat");
+      const r = applyCasualty(next.units, live.id);
+      next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — attacker ${casualtyPhrase(r.outcome)} (roll ${roll}).`, "combat");
     }
   } else if (result === "Ar") {
     if (bombarding) {
@@ -189,21 +194,25 @@ export function stepCombat(state: GameState, unitId: string): GameState {
           "combat"
         );
       } else {
-        const { [live.id]: _drop, ...rest } = next.units;
-        next = addLog({ ...next, units: rest }, `${attackerName} attacks ${defenderName} at ${odds} — no room to retreat, attacker eliminated (roll ${roll}).`, "combat");
+        const r = applyCasualty(next.units, live.id);
+        next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — no room to retreat, attacker ${casualtyPhrase(r.outcome)} (roll ${roll}).`, "combat");
       }
     }
   } else if (result === "DE") {
-    const { [bestTarget.id]: _drop, ...rest } = next.units;
-    next = addLog({ ...next, units: rest }, `${attackerName} attacks ${defenderName} at ${odds} — defender eliminated (roll ${roll})!`, "combat");
+    const r = applyCasualty(next.units, bestTarget.id);
+    next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — defender ${casualtyPhrase(r.outcome)} (roll ${roll})!`, "combat");
   } else if (result === "EX") {
-    const { [bestTarget.id]: _drop, ...rest } = next.units;
-    next = { ...next, units: rest };
+    const defResult = applyCasualty(next.units, bestTarget.id);
+    next = { ...next, units: defResult.units };
     if (bombarding) {
-      next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — defender eliminated (roll ${roll}).`, "combat");
+      next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — defender ${casualtyPhrase(defResult.outcome)} (roll ${roll}).`, "combat");
     } else {
-      const { [live.id]: _d1, ...rest2 } = next.units;
-      next = addLog({ ...next, units: rest2 }, `${attackerName} and ${defenderName} clash at ${odds} — both eliminated (roll ${roll}).`, "combat");
+      const atkResult = applyCasualty(next.units, live.id);
+      next = addLog(
+        { ...next, units: atkResult.units },
+        `${attackerName} and ${defenderName} clash at ${odds} — ${defenderName} is ${casualtyPhrase(defResult.outcome)}, and ${attackerName} is ${casualtyPhrase(atkResult.outcome)} (roll ${roll}).`,
+        "combat"
+      );
     }
   } else if (result === "DR") {
     next = addLog(next, `${attackerName} attacks ${defenderName} at ${odds} — defender falls back (roll ${roll}).`, "combat");

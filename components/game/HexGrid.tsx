@@ -2,7 +2,7 @@
 
 import { hexCenter, hexCorners, hexKey, hexNeighbors, type HexCoord } from "@/lib/hex";
 import { COLS, ROWS, TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES, isCavalryKind } from "@/lib/units";
+import { UNIT_TYPES, currentPower, isCavalryKind } from "@/lib/units";
 import type { Faction, GameState, Unit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -139,8 +139,8 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
           (phase === "player-combat" && isPlayer && unit.hasAttacked) ||
           (phase === "player-move" && isPlayer && unit.hasMoved);
 
-        let stroke = "#1a1608";
-        let strokeWidth = 1.4;
+        let stroke = unit.reduced ? "#8a6d9c" : "#1a1608";
+        let strokeWidth = unit.reduced ? 2 : 1.4;
         let dash: string | undefined = unit.routed ? "3 2" : undefined;
         if (isRetreating) {
           stroke = "#ff8c42";
@@ -185,7 +185,7 @@ export default function HexGrid({ state, onHexClick, attackableIds, eligibleAtta
               {def.symbol}
             </text>
             <text x={x} y={y + 11} textAnchor="middle" fontSize={10.5} fontWeight={600} fill={colors.text} opacity={0.95}>
-              {def.power}-{def.movement}
+              {currentPower(unit)}-{def.movement}
             </text>
           </g>
         );

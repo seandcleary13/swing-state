@@ -1,7 +1,7 @@
 import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { unitAt } from "./movement";
 import { addLog } from "./log";
-import { unitDisplayName } from "./units";
+import { applyCasualty, unitDisplayName } from "./units";
 import type { GameState } from "./types";
 
 export const MAX_RETREAT_HEXES = 3;
@@ -73,12 +73,12 @@ export function beginRetreats(state: GameState, unitIds: string[], awayFrom: Hex
     if (!unit) continue;
     const options = retreatStepOptions(working, unit.pos, awayFrom);
     if (!options.length) {
-      const { [id]: _drop, ...rest } = working.units;
-      working = addLog(
-        { ...working, units: rest },
-        `${unitDisplayName(unit.faction, unit.kind)} has nowhere to fall back and is eliminated.`,
-        "combat"
-      );
+      const r = applyCasualty(working.units, id);
+      const text =
+        r.outcome === "eliminated"
+          ? `${unitDisplayName(unit.faction, unit.kind)} has nowhere to fall back and is eliminated.`
+          : `${unitDisplayName(unit.faction, unit.kind)} has nowhere to fall back and is battered to half strength.`;
+      working = addLog({ ...working, units: r.units }, text, "combat");
       continue;
     }
     const retreatOptions: Record<string, true> = {};

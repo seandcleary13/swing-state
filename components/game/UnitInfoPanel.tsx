@@ -1,7 +1,7 @@
 "use client";
 
 import { TERRAIN_DEFS } from "@/lib/mapData";
-import { UNIT_TYPES, attackRange, unitDisplayName } from "@/lib/units";
+import { UNIT_TYPES, attackRange, currentPower, unitDisplayName } from "@/lib/units";
 import type { GameState } from "@/lib/types";
 import { hexKey } from "@/lib/hex";
 
@@ -26,7 +26,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
     <div className="rounded-lg border border-[#f4d35e] bg-[#17130c] px-4 py-3">
       <div className="font-black text-[#f4d35e] text-sm mb-1">{unitDisplayName(unit.faction, unit.kind)}</div>
       <div className="text-xs text-[#cbbf9c] flex gap-3 mb-1">
-        <span>POWER {def.power}</span>
+        <span>POWER {currentPower(unit)}{unit.reduced ? ` / ${def.power}` : ""}</span>
         <span>MOV {def.movement}</span>
         {unit.kind === "artillery" && <span>RANGE {range}</span>}
       </div>
@@ -40,6 +40,7 @@ export default function UnitInfoPanel({ state }: { state: GameState }) {
         {unit.hasAttacked && <span className="text-[#8a7f63]">Attacked</span>}
         {unit.hasMoved && <span className="text-[#8a7f63]">Repositioned</span>}
         {unit.routed && <span className="text-[#d5595c]">Disordered</span>}
+        {unit.reduced && <span className="text-[#8a6d9c]">Reduced</span>}
       </div>
     </div>
   );

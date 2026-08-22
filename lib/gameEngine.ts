@@ -4,7 +4,8 @@ import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
-import { ORDER_OF_BATTLE, UNIT_TYPES, attackRange, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import { ORDER_OF_BATTLE, applyCasualty, attackRange, currentPower, defensePower, isCavalryKind, unitDisplayName } from "./units";
+import type { CasualtyOutcome } from "./units";
 import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat } from "./ai";
 import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
 
@@ -20,6 +21,10 @@ function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function casualtyPhrase(outcome: CasualtyOutcome): string {
+  return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
 }
 
 function newId(units: Record<string, Unit>, faction: Faction): string {
@@ -95,6 +100,8 @@ function recomputeObjectiveControl(state: GameState): GameState {
   return { ...state, map };
 }
 
+// Note: `reduced` is persistent battlefield damage, not a per-turn flag — it is deliberately
+// never cleared here.
 function resetFactionFlags(state: GameState, faction: Faction): GameState {
   const units = { ...state.units };
   for (const [id, u] of Object.entries(units)) {
@@ -128,7 +135,7 @@ export function initGameState(): GameState {
   ORDER_OF_BATTLE.forEach((kind, i) => {
     const [col, row] = COALITION_DEPLOY[i];
     const id = `coalition-${i}`;
-    units[id] = { id, faction: "coalition", kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false };
+    units[id] = { id, faction: "coalition", kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
   });
 
   return {
@@ -207,7 +214,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
       const id = newId(state.units, "france");
       const units = {
         ...state.units,
-        [id]: { id, faction: "france" as const, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false },
+        [id]: { id, faction: "france" as const, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false },
       };
       const newPool = [...pool];
       newPool.splice(idx, 1);
@@ -296,8 +303,8 @@ export function gameReducer(state: GameState, action: Action): GameState {
       if (!defender || !attackers.length) return state;
       if (defender.faction !== state.aiFaction) return state;
 
-      const atk = attackers.reduce((sum, u) => sum + UNIT_TYPES[u.kind].power, 0);
-      const def = defensePower(UNIT_TYPES[defender.kind].power, terrainMultiplier(state, defender.pos));
+      const atk = attackers.reduce((sum, u) => sum + currentPower(u), 0);
+      const def = defensePower(currentPower(defender), terrainMultiplier(state, defender.pos));
       const roll = Math.floor(Math.random() * 6) + 1;
       const { odds, result } = rollCombat(atk, def, roll);
       const attackerNames = joinNames(attackers.map((u) => unitDisplayName(state.playerFaction, u.kind)));
@@ -317,20 +324,32 @@ export function gameReducer(state: GameState, action: Action): GameState {
         if (bombardingOnly) {
           text = `${attackerNames} bombard ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`;
         } else {
-          for (const a of adjacentAttackers) delete units[a.id];
-          text = `${attackerNames} attack ${defenderName} at ${odds} — repulsed and eliminated (roll ${roll}).`;
+          const casualties = adjacentAttackers.map((a) => {
+            const r = applyCasualty(units, a.id);
+            units = r.units;
+            return { name: unitDisplayName(state.playerFaction, a.kind), outcome: r.outcome };
+          });
+          const clause =
+            casualties.length === 1
+              ? `repulsed and ${casualtyPhrase(casualties[0].outcome)}`
+              : joinNames(casualties.map((c) => `${c.name} ${casualtyPhrase(c.outcome)}`));
+          text = `${attackerNames} attack ${defenderName} at ${odds} — ${clause} (roll ${roll}).`;
         }
       } else if (result === "DE") {
-        delete units[defender.id];
-        text = `${attackerNames} attack ${defenderName} at ${odds} — enemy eliminated (roll ${roll})!`;
+        const r = applyCasualty(units, defender.id);
+        units = r.units;
+        text = `${attackerNames} attack ${defenderName} at ${odds} — enemy ${casualtyPhrase(r.outcome)} (roll ${roll})!`;
       } else if (result === "EX") {
-        delete units[defender.id];
+        const defResult = applyCasualty(units, defender.id);
+        units = defResult.units;
         if (bombardingOnly) {
-          text = `${attackerNames} bombard ${defenderName} at ${odds} — enemy eliminated (roll ${roll}).`;
+          text = `${attackerNames} bombard ${defenderName} at ${odds} — enemy ${casualtyPhrase(defResult.outcome)} (roll ${roll}).`;
         } else {
-          const weakest = [...adjacentAttackers].sort((a, b) => UNIT_TYPES[a.kind].power - UNIT_TYPES[b.kind].power)[0];
-          delete units[weakest.id];
-          text = `${attackerNames} clash with ${defenderName} at ${odds} — both sides lose a unit (roll ${roll}).`;
+          const weakest = [...adjacentAttackers].sort((a, b) => currentPower(a) - currentPower(b))[0];
+          const atkResult = applyCasualty(units, weakest.id);
+          units = atkResult.units;
+          const weakestName = unitDisplayName(state.playerFaction, weakest.kind);
+          text = `${attackerNames} clash with ${defenderName} at ${odds} — ${defenderName} is ${casualtyPhrase(defResult.outcome)}, and ${weakestName} is ${casualtyPhrase(atkResult.outcome)} (roll ${roll}).`;
         }
       } else if (result === "DR") {
         const vacatedPos = defender.pos;
@@ -338,13 +357,14 @@ export function gameReducer(state: GameState, action: Action): GameState {
         if (retreat) {
           units[defender.id] = { ...defender, pos: retreat, routed: true };
           if (adjacentAttackers.length) {
-            const lead = [...adjacentAttackers].sort((a, b) => UNIT_TYPES[b.kind].power - UNIT_TYPES[a.kind].power)[0];
+            const lead = [...adjacentAttackers].sort((a, b) => currentPower(b) - currentPower(a))[0];
             drAdvanceOffer = { attackerId: lead.id, hex: vacatedPos };
           }
           text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
         } else {
-          delete units[defender.id];
-          text = `${attackerNames} attack ${defenderName} at ${odds} — no room to retreat, enemy eliminated (roll ${roll}).`;
+          const r = applyCasualty(units, defender.id);
+          units = r.units;
+          text = `${attackerNames} attack ${defenderName} at ${odds} — no room to retreat, enemy ${casualtyPhrase(r.outcome)} (roll ${roll}).`;
         }
       } else if (result === "Ar") {
         text = bombardingOnly

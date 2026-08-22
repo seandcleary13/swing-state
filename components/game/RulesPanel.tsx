@@ -19,11 +19,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🎲 Combat Results Table",
-    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Odds always round down in the defender's favor — a ratio has to actually clear a threshold to reach the next column (1.8:1 stays 1:1, it doesn't round up to 2:1). Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out.",
+    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Odds always round down in the defender's favor — a ratio has to actually clear a threshold to reach the next column (1.8:1 stays 1:1, it doesn't round up to 2:1). Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out. A unit's first Eliminated or Exchange result doesn't remove it — it's reduced to half Power instead. Only a second such hit, once it's already reduced, actually takes it off the board.",
   },
   {
     title: "🏃 Retreats",
-    body: "Whichever side owns the retreating unit chooses its path, one hex at a time, up to 3 hexes — you're never forced to use the full distance, and can stop early with the \"Stop Retreating\" button once you've fallen back at least one hex. If there's nowhere at all to go, the unit is eliminated instead. When your own attack forces a Defender Retreat, you get to choose whether the attacking unit advances into the vacated ground or holds its position.",
+    body: "Whichever side owns the retreating unit chooses its path, one hex at a time, up to 3 hexes — you're never forced to use the full distance, and can stop early with the \"Stop Retreating\" button once you've fallen back at least one hex. If there's nowhere at all to go, the unit is reduced to half strength instead — or eliminated, if it was already reduced. When your own attack forces a Defender Retreat, you get to choose whether the attacking unit advances into the vacated ground or holds its position.",
   },
   {
     title: "🎯 Bombarding Artillery",
@@ -43,7 +43,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🧭 Unit Types",
-    body: "Each unit's numbers read Power-Movement. Cavalry (3 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (6 Power / 5 Movement) hit just as hard as Artillery but keep Cavalry's speed and get the two-move cavalry phases — a battering ram for the Attacker. Infantry (4 Power / 4 Movement) are the balanced backbone of the army. Artillery (5 Power / 3 Movement) hits hard but is slow to reposition.",
+    body: "Each unit's numbers read Power-Movement. Cavalry (6 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (12 Power / 5 Movement) hit just as hard as Artillery but keep Cavalry's speed and get the two-move cavalry phases — a battering ram for the Attacker. Infantry (8 Power / 4 Movement) are the balanced backbone of the army. Artillery (10 Power / 3 Movement) hits hard but is slow to reposition. A reduced unit fights at half its listed Power (shown as a violet-outlined counter) until it's eliminated or the battle ends — its Movement is unaffected.",
   },
 ];
 
