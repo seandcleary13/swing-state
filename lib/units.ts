@@ -1,4 +1,4 @@
-import type { Unit, UnitKind, UnitTypeDef } from "./types";
+import type { Faction, Unit, UnitKind, UnitTypeDef } from "./types";
 
 // Base Power is doubled from the original tutorial numbers so a reduced (half-strength)
 // unit has room to land exactly back on those original values — see currentPower below.
@@ -81,25 +81,25 @@ export function applyCasualty(
   return { units: { ...units, [unitId]: { ...unit, reduced: true } }, outcome: "reduced" };
 }
 
-// Order of battle for each side — 15 units. Ordered infantry → cavalry → heavy → artillery
-// to match the deployment tables, which put the foot in front and the guns at the back.
-export const ORDER_OF_BATTLE: UnitKind[] = [
-  "infantry",
-  "infantry",
-  "infantry",
-  "infantry",
-  "infantry",
-  "infantry",
-  "infantry",
-  "cavalry",
-  "cavalry",
-  "cavalry",
-  "heavy-cavalry",
-  "heavy-cavalry",
-  "artillery",
-  "artillery",
-  "artillery",
-];
+// Order of battle — 15 units a side, but no longer the same 15. France fields a shock army
+// heavy in horse and guns; the Coalition fields a defensive one built around massed foot.
+// Each list is ordered infantry → cavalry → heavy → artillery to match the deployment
+// tables, which put the foot in front and everything else at the back.
+export const ORDER_OF_BATTLE: Record<Faction, UnitKind[]> = {
+  france: [
+    "infantry", "infantry", "infantry", "infantry", "infantry",
+    "cavalry", "cavalry", "cavalry",
+    "heavy-cavalry", "heavy-cavalry", "heavy-cavalry",
+    "artillery", "artillery", "artillery", "artillery",
+  ],
+  coalition: [
+    "infantry", "infantry", "infantry", "infantry", "infantry",
+    "infantry", "infantry", "infantry", "infantry",
+    "cavalry", "cavalry",
+    "heavy-cavalry",
+    "artillery", "artillery", "artillery",
+  ],
+};
 
 // Resupply can raise fresh formations of the common arms — elite Heavy Cavalry can't be replaced.
 export const RESUPPLY_KINDS: UnitKind[] = ["infantry", "cavalry", "artillery"];

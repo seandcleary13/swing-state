@@ -1,6 +1,6 @@
 import { hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { isEnemyZoc, otherFaction, unitAt } from "./movement";
-import type { Faction, GameState, Unit } from "./types";
+import type { Faction, GameState, Unit, UnitKind } from "./types";
 
 /** True only when every on-map hex around `pos` holds an enemy unit — a closed ring. */
 function isEncircled(state: GameState, pos: HexCoord, faction: Faction): boolean {
@@ -86,4 +86,32 @@ export function newUnitId(units: Record<string, Unit>, faction: Faction): string
   let n = Object.values(units).filter((u) => u.faction === faction).length;
   while (`${faction}-${n}` in units) n++;
   return `${faction}-${n}`;
+}
+
+// --- The reinforcement schedule -------------------------------------------------------------
+// The two sides' clocks run in opposite directions. France starts flush and dries up; the
+// Coalition starts with nothing and its depots open as the campaign wears on.
+
+const RESUPPLY_SCHEDULE: Record<Faction, number[]> = {
+  //          T1 T2 T3 T4 T5 T6 T7 T8
+  france:    [ 2, 2, 1, 1, 1, 1, 0, 0],
+  coalition: [ 0, 0, 0, 1, 1, 1, 1, 1],
+};
+
+/** How many resupply actions `faction` may take on `turn`. */
+export function resupplyAllowance(faction: Faction, turn: number): number {
+  return RESUPPLY_SCHEDULE[faction][turn - 1] ?? 0;
+}
+
+// Free Coalition drafts, over and above the turn's resupply action. These arrive at FULL
+// strength, unlike anything mustered by a resupply action.
+const SCHEDULED_DRAFTS: Record<number, UnitKind[]> = {
+  5: ["infantry", "infantry", "artillery"],
+  6: ["infantry", "infantry", "artillery"],
+};
+
+/** Formations that march in free at the start of the Coalition's resupply phase on `turn`. */
+export function scheduledDrafts(faction: Faction, turn: number): UnitKind[] {
+  if (faction !== "coalition") return [];
+  return SCHEDULED_DRAFTS[turn] ?? [];
 }

@@ -22,9 +22,17 @@ export default function ResupplyPrompt({ state, resupplyableIds, pendingKind, on
 
   return (
     <div className="rounded-lg border-2 border-[#7fa86e] bg-[#17130c] px-4 py-3 flex flex-col gap-2">
-      <div className="text-sm text-[#cbbf9c]">
-        <span className="text-[#7fa86e] font-bold">Resupply</span> — take one action: bring a worn unit back to full
-        strength, or muster a fresh half-strength formation on your side of the board.
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-sm text-[#cbbf9c]">
+          <span className="text-[#7fa86e] font-bold">Resupply</span> — bring a worn unit back to full strength, or
+          muster a fresh half-strength formation on your side of the board.
+        </div>
+        <div
+          data-resupply-left={state.resupplyLeft}
+          className="text-xs font-black tracking-widest text-[#7fa86e] border border-[#7fa86e] rounded-md px-2.5 py-1 whitespace-nowrap"
+        >
+          {state.resupplyLeft} ACTION{state.resupplyLeft === 1 ? "" : "S"} LEFT
+        </div>
       </div>
 
       {recoverable.length > 0 && (

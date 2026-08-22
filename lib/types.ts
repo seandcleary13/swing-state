@@ -111,6 +111,8 @@ export interface GameState {
   /** Interactive attacker-retreat: set while the player is choosing where their falling-back units go. */
   pendingRetreat: PendingRetreat | null;
   retreatOptions: Record<string, true>;
+  /** Resupply actions the player has left this turn — set from the schedule at the turn's start. */
+  resupplyLeft: number;
   /** Offered after the player's own attack forces a Defender Retreat: advance into the vacated hex, or hold. */
   pendingAdvance: PendingAdvance | null;
   /** Non-null only during phase "ai-turn": drives the Coalition's turn one step at a time. */

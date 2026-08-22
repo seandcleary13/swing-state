@@ -6,28 +6,62 @@ import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } 
 import { addLog } from "./log";
 import { ORDER_OF_BATTLE, RESUPPLY_KINDS, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
-import { canTraceSupply, newUnitId } from "./supply";
-import { buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat, stepResupply } from "./ai";
+import { canTraceSupply, newUnitId, resupplyAllowance, scheduledDrafts } from "./supply";
+import { applyScheduledDrafts, buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat, stepResupply } from "./ai";
 import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
 
-// Both armies start on the board, foot in front and guns at the back. Index-aligned with
-// ORDER_OF_BATTLE: 7 infantry, 3 cavalry, 2 heavy cavalry, 3 artillery.
-const FRANCE_DEPLOY: Array<[number, number]> = [
-  [1, 1], [1, 3], [1, 5], [1, 7], [1, 9], [1, 11], [1, 13],
-  [0, 2], [0, 6], [0, 10],
-  [0, 4], [0, 8],
-  [0, 0], [0, 12], [0, 13],
-];
-
-const COALITION_DEPLOY: Array<[number, number]> = [
-  [17, 1], [17, 3], [17, 5], [17, 7], [17, 9], [17, 11], [17, 13],
-  [18, 2], [18, 6], [18, 10],
-  [18, 4], [18, 8],
-  [18, 0], [18, 12], [18, 13],
-];
+// Both armies start on the board, foot in the forward column and everything else behind.
+// Each table is index-aligned with that side's ORDER_OF_BATTLE list.
+const DEPLOY: Record<Faction, Array<[number, number]>> = {
+  // France: 5 infantry forward on column 1; 3 cavalry, 3 heavy cavalry, 4 guns on column 0.
+  france: [
+    [1, 1], [1, 4], [1, 6], [1, 9], [1, 12],
+    [0, 2], [0, 7], [0, 11],
+    [0, 4], [0, 6], [0, 9],
+    [0, 0], [0, 5], [0, 10], [0, 13],
+  ],
+  // Coalition: 9 infantry forward on column 17; 2 cavalry, 1 heavy cavalry, 3 guns on column 18.
+  coalition: [
+    [17, 0], [17, 2], [17, 3], [17, 5], [17, 6], [17, 8], [17, 9], [17, 11], [17, 13],
+    [18, 4], [18, 10],
+    [18, 7],
+    [18, 1], [18, 6], [18, 12],
+  ],
+};
 
 function isOnHill(state: GameState, pos: HexCoord): boolean {
   return state.map[hexKey(pos)]?.terrain === "hill";
+}
+
+/** Consumes one of the player's resupply actions, moving on once the turn's allowance is spent. */
+function spendResupplyAction(state: GameState): GameState {
+  const resupplyLeft = Math.max(0, state.resupplyLeft - 1);
+  if (resupplyLeft > 0) return { ...state, resupplyLeft, selectedUnitId: null, reachable: {} };
+  return { ...state, resupplyLeft, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+}
+
+/**
+ * Opens the player's turn on `turn`, loading that turn's resupply allowance from the schedule.
+ * A turn with no allowance skips the resupply phase entirely rather than showing an empty one.
+ */
+function beginPlayerTurn(state: GameState, turn: number): GameState {
+  const resupplyLeft = resupplyAllowance(state.playerFaction, turn);
+  const next: GameState = {
+    ...state,
+    turn,
+    resupplyLeft,
+    phase: resupplyLeft > 0 ? "player-resupply" : "player-cavalry-move",
+    selectedUnitId: null,
+    reachable: {},
+  };
+  if (resupplyLeft > 0) {
+    return addLog(
+      next,
+      `Turn ${turn} begins — ${resupplyLeft} resupply action${resupplyLeft > 1 ? "s" : ""} available.`,
+      "info"
+    );
+  }
+  return addLog(next, `Turn ${turn} begins — the depots are empty, no resupply. Cavalry advances first.`, "info");
 }
 
 function joinNames(names: string[]): string {
@@ -128,22 +162,20 @@ export function initGameState(): GameState {
 
   // Both armies take the field already deployed — no placement step.
   const units: Record<string, Unit> = {};
-  ORDER_OF_BATTLE.forEach((kind, i) => {
-    for (const [faction, table] of [
-      ["france", FRANCE_DEPLOY] as const,
-      ["coalition", COALITION_DEPLOY] as const,
-    ]) {
-      const [col, row] = table[i];
+  for (const faction of ["france", "coalition"] as const) {
+    ORDER_OF_BATTLE[faction].forEach((kind, i) => {
+      const [col, row] = DEPLOY[faction][i];
       const id = `${faction}-${i}`;
       units[id] = { id, faction, kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
-    }
-  });
+    });
+  }
 
   return {
     map,
     units,
     turn: 1,
     totalTurns: 8,
+    resupplyLeft: resupplyAllowance("france", 1),
     phase: "player-resupply",
     playerFaction: "france",
     aiFaction: "coalition",
@@ -203,22 +235,22 @@ export function gameReducer(state: GameState, action: Action): GameState {
     case "RESET":
       return initGameState();
 
-    // --- Resupply: one action per turn, either bringing a worn unit back up to strength
-    // --- or raising a fresh (half-strength) formation at home.
+    // --- Resupply: a scheduled number of actions per turn (see lib/supply.ts), each either
+    // --- bringing a worn unit back up to strength or raising a fresh half-strength formation.
     case "RESUPPLY_FLIP": {
-      if (state.phase !== "player-resupply") return state;
+      if (state.phase !== "player-resupply" || state.resupplyLeft <= 0) return state;
       const unit = state.units[action.unitId];
       if (!unit || unit.faction !== state.playerFaction || !unit.reduced) return state;
       if (!canTraceSupply(state, unit)) return state;
 
       const units = { ...state.units, [unit.id]: { ...unit, reduced: false } };
-      let next: GameState = { ...state, units, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+      let next = spendResupplyAction({ ...state, units });
       next = addLog(next, `${unitDisplayName(unit.faction, unit.kind)} draws supply and is back up to full strength.`, "info");
       return next;
     }
 
     case "RESUPPLY_PLACE": {
-      if (state.phase !== "player-resupply") return state;
+      if (state.phase !== "player-resupply" || state.resupplyLeft <= 0) return state;
       if (!RESUPPLY_KINDS.includes(action.kind)) return state;
       const tile = state.map[hexKey(action.hex)];
       if (!tile || tile.deploymentFor !== state.playerFaction) return state;
@@ -229,7 +261,7 @@ export function gameReducer(state: GameState, action: Action): GameState {
         ...state.units,
         [id]: { id, faction: state.playerFaction, kind: action.kind, pos: action.hex, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: true },
       };
-      let next: GameState = { ...state, units, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+      let next = spendResupplyAction({ ...state, units });
       next = addLog(next, `A fresh ${unitDisplayName(state.playerFaction, action.kind)} formation musters at half strength.`, "info");
       return next;
     }
@@ -448,7 +480,8 @@ export function gameReducer(state: GameState, action: Action): GameState {
 
     case "END_PHASE": {
       if (state.phase === "player-resupply") {
-        return { ...state, phase: "player-cavalry-move", selectedUnitId: null, reachable: {} };
+        // Skipping forfeits whatever is left of this turn's allowance.
+        return { ...state, phase: "player-cavalry-move", resupplyLeft: 0, selectedUnitId: null, reachable: {} };
       }
 
       if (state.phase === "player-cavalry-move") {
@@ -468,10 +501,16 @@ export function gameReducer(state: GameState, action: Action): GameState {
 
         let next = addLog({ ...state, selectedUnitId: null, reachable: {} }, "— The Coalition responds —", "info");
         next = resetFactionFlags(next, next.aiFaction);
+        // The Coalition's resupply sub-phase runs as a short to-do list: any scheduled draft
+        // first, then its one resupply action if the schedule grants it one this turn.
+        const resupplySteps: string[] = [];
+        if (scheduledDrafts(next.aiFaction, next.turn).length) resupplySteps.push("draft");
+        if (resupplyAllowance(next.aiFaction, next.turn) > 0) resupplySteps.push("action");
+
         next = {
           ...next,
           phase: "ai-turn",
-          aiTurnState: { subPhase: "resupply", queue: [], pendingAutoAdvance: null },
+          aiTurnState: { subPhase: "resupply", queue: resupplySteps, pendingAutoAdvance: null },
         };
         return next;
       }
@@ -512,13 +551,21 @@ function advanceAiTurnOnce(state: GameState): GameState {
   while (working.aiTurnState) {
     const ats: AiTurnState = working.aiTurnState;
 
-    // Resupply is a single action rather than a per-unit queue.
+    // Resupply runs a short to-do list ("draft", "action") rather than a per-unit queue.
     if (ats.subPhase === "resupply") {
+      if (ats.queue.length === 0) {
+        working = {
+          ...working,
+          aiTurnState: { subPhase: "cavalry", queue: buildCavalryQueue(working), pendingAutoAdvance: null },
+        };
+        continue;
+      }
+      const step = ats.queue[0];
       const beforeUnits = working.units;
-      const after = stepResupply(working);
+      const after = step === "draft" ? applyScheduledDrafts(working) : stepResupply(working);
       working = {
         ...after,
-        aiTurnState: { subPhase: "cavalry", queue: buildCavalryQueue(after), pendingAutoAdvance: null },
+        aiTurnState: { subPhase: "resupply", queue: ats.queue.slice(1), pendingAutoAdvance: null },
       };
       if (after.units !== beforeUnits) return working;
       continue;
@@ -574,9 +621,7 @@ function finalizeAiTurn(state: GameState): GameState {
   }
 
   next = resetFactionFlags(next, next.playerFaction);
-  next = { ...next, turn: nextTurn, phase: "player-resupply", aiTurnState: null };
-  next = addLog(next, `Turn ${nextTurn} begins — resupply first.`, "info");
-  return next;
+  return beginPlayerTurn({ ...next, aiTurnState: null }, nextTurn);
 }
 
 // --- Undo ---------------------------------------------------------------------------------

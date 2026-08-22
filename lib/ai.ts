@@ -6,7 +6,7 @@ import { computeRetreat, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
 import { RESUPPLY_KINDS, UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
 import type { CasualtyOutcome } from "./units";
-import { canTraceSupply, newUnitId, openHomeHexes } from "./supply";
+import { canTraceSupply, newUnitId, openHomeHexes, scheduledDrafts } from "./supply";
 import type { Faction, GameState, Unit, UnitKind } from "./types";
 
 function casualtyPhrase(outcome: CasualtyOutcome): string {
@@ -54,6 +54,47 @@ function nearestTargetDistance(state: GameState, from: HexCoord, aiFaction: Fact
           .map((u) => u.pos);
   if (!targets.length) return 0;
   return Math.min(...targets.map((t) => hexDistance(from, t)));
+}
+
+/**
+ * Marches in the Coalition's scheduled draft for this turn, free of the turn's resupply action
+ * and at FULL strength. Foot fills the forward home column and guns the rear one; if the home
+ * edge is too crowded to take them all, whatever doesn't fit is lost.
+ */
+export function applyScheduledDrafts(state: GameState): GameState {
+  const faction = state.aiFaction;
+  const draft = scheduledDrafts(faction, state.turn);
+  if (!draft.length) return state;
+
+  const open = openHomeHexes(state, faction);
+  if (!open.length) {
+    return addLog(state, `Coalition reinforcements arrive but find no room on the line — they are turned away.`, "info");
+  }
+
+  // openHomeHexes runs front column first, so foot takes hexes from the front of the list and
+  // guns from the back, keeping the same doctrine as the initial deployment.
+  let head = 0;
+  let tail = open.length - 1;
+  const units = { ...state.units };
+  const arrived: UnitKind[] = [];
+
+  for (const kind of draft) {
+    if (head > tail) break;
+    const pos = kind === "artillery" ? open[tail--] : open[head++];
+    const id = newUnitId(units, faction);
+    units[id] = { id, faction, kind, pos, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
+    arrived.push(kind);
+  }
+
+  if (!arrived.length) return state;
+
+  const names = arrived.map((k) => unitDisplayName(faction, k)).join(", ");
+  const lost = draft.length - arrived.length;
+  const text =
+    lost > 0
+      ? `Coalition reinforcements reach the front at full strength: ${names}. ${lost} more found no room and were turned away.`
+      : `Coalition reinforcements reach the front at full strength: ${names}.`;
+  return addLog({ ...state, units }, text, "info");
 }
 
 /**

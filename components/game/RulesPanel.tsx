@@ -9,11 +9,15 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🪖 The Armies",
-    body: "Both armies begin the campaign already drawn up — France along the western edge, the Coalition along the eastern edge — so there's no placement step. Each side fields 15 units: 7 Infantry, 3 Cavalry, 2 Heavy Cavalry and 3 Artillery, with the foot in front and the guns behind.",
+    body: "Both armies begin already drawn up — France along the western edge, the Coalition along the eastern edge — so there's no placement step. Each side fields 15 units, but not the same 15. France brings a shock army: 5 Infantry, 3 Cavalry, 3 Heavy Cavalry and 4 Artillery. The Coalition brings a defensive one built on massed foot: 9 Infantry, 2 Cavalry, 1 Heavy Cavalry and 3 Artillery. Infantry stand in the forward column, everything else behind. Since Heavy Cavalry can never be replaced, France has three irreplaceable units to spend carefully and the Coalition only one.",
   },
   {
     title: "🚚 1. Resupply",
-    body: "At the start of each of your turns you may take one resupply action — or skip it. Either bring ONE worn (reduced) unit back to full strength, or muster ONE fresh formation at half strength on your own edge of the board. To be brought back up, a unit must trace a line of supply back to a town your side controls or to your own edge — a line that can't pass through enemy units or their Zones of Control, and a unit standing next to an enemy is cut off entirely and must break contact first. Units eligible to recover are ringed in green. Fresh formations can be Infantry, Cavalry or Artillery — elite Heavy Cavalry can never be replaced.",
+    body: "Each resupply action does one of two things: bring ONE worn (reduced) unit back to full strength, or muster ONE fresh formation at half strength on your own edge of the board. To be brought back up, a unit must trace a line of supply back to a town your side controls or to your own edge — a line that can't pass through enemy units or their Zones of Control, and a unit standing next to an enemy is cut off entirely and must break contact first. Units eligible to recover are ringed in green. Fresh formations can be Infantry, Cavalry or Artillery — elite Heavy Cavalry can never be replaced.",
+  },
+  {
+    title: "📅 The Reinforcement Schedule",
+    body: "How many resupply actions you get is fixed by the calendar, and the two sides' clocks run opposite ways. France starts flush and dries up: 2 actions on Turns 1–2, 1 action on Turns 3–6, and NOTHING from Turn 7 — the resupply phase is skipped entirely once the depots run dry. The Coalition starts with nothing: no resupply at all on Turns 1–3, then 1 action every turn from Turn 4 to the end. On top of that, fresh Coalition columns march in free on Turns 5 and 6 — two Infantry and one Artillery each time, arriving at FULL strength and costing the Coalition none of its own action. Time is France's enemy: strike early, while you still outweigh them.",
   },
   {
     title: "🏰 Sieges",
