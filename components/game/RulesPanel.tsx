@@ -61,7 +61,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🗺 Terrain",
-    body: "Terrain multiplies a defender's Power rather than adding a flat bonus, so it rewards your strongest units the most. Open Field: no change (×1). Forest, Hill & Town: defense ×2. Marsh: defense ×1.5. Forest & Hill cost 2 movement points to enter, Marsh costs 3, Town costs 1 and is an objective. France's home edge out through Rocheval, its first objective, is kept clear of hills and marsh and forest is scarce there, so the opening advance moves fast — rough terrain thickens up further east.",
+    body: "Terrain multiplies a defender's Power rather than adding a flat bonus, so it rewards your strongest units the most. Open Field: no change (×1). Forest, Hill & Town: defense ×2. Marsh: defense ×1.5. Forest & Hill cost 2 movement points to enter, Marsh costs 3, Town costs 1 and is an objective. France's home edge out through Rocheval, its first objective, is mostly open — just a scattering of hills and woods rather than none at all — so the opening advance still moves fast. Rough terrain thickens up considerably further east.",
   },
   {
     title: "🧭 Unit Types",
