@@ -4,7 +4,6 @@ import type { Faction, Unit, UnitKind, UnitTypeDef } from "./types";
 // unit has room to land exactly back on those original values — see currentPower below.
 export const UNIT_TYPES: Record<UnitKind, UnitTypeDef> = {
   cavalry: { kind: "cavalry", name: "Cavalry", power: 6, movement: 5, symbol: "CAV" },
-  "heavy-cavalry": { kind: "heavy-cavalry", name: "Heavy Cavalry", power: 12, movement: 5, symbol: "HCV" },
   infantry: { kind: "infantry", name: "Infantry", power: 8, movement: 4, symbol: "INF" },
   artillery: { kind: "artillery", name: "Artillery", power: 10, movement: 3, symbol: "ART" },
 };
@@ -13,13 +12,11 @@ export const UNIT_TYPES: Record<UnitKind, UnitTypeDef> = {
 export const FACTION_UNIT_NAMES: Record<"france" | "coalition", Record<UnitKind, string>> = {
   france: {
     cavalry: "Hussars",
-    "heavy-cavalry": "Cuirassiers",
     infantry: "Line Infantry",
     artillery: "Grande Battery",
   },
   coalition: {
     cavalry: "Uhlans",
-    "heavy-cavalry": "Dragoons",
     infantry: "Line Infantry",
     artillery: "Foot Battery",
   },
@@ -29,9 +26,9 @@ export function unitDisplayName(faction: "france" | "coalition", kind: UnitKind)
   return FACTION_UNIT_NAMES[faction][kind] ?? UNIT_TYPES[kind].name;
 }
 
-// Both cavalry kinds get the opening cavalry-only movement phase (and a second move later).
+// Cavalry gets the opening cavalry-only movement phase (and a second move later).
 export function isCavalryKind(kind: UnitKind): boolean {
-  return kind === "cavalry" || kind === "heavy-cavalry";
+  return kind === "cavalry";
 }
 
 // Every unit can attack an adjacent hex. Artillery can also fire at range 2 — or 3 while it holds a hill.
@@ -83,23 +80,21 @@ export function applyCasualty(
 
 // Order of battle — 15 units a side, but no longer the same 15. France fields a shock army
 // heavy in horse and guns; the Coalition fields a defensive one built around massed foot.
-// Each list is ordered infantry → cavalry → heavy → artillery to match the deployment
-// tables, which put the foot in front and everything else at the back.
+// Each list is ordered infantry → cavalry → artillery to match the deployment tables, which
+// put the foot in front and everything else at the back.
 export const ORDER_OF_BATTLE: Record<Faction, UnitKind[]> = {
   france: [
     "infantry", "infantry", "infantry", "infantry", "infantry",
-    "cavalry", "cavalry", "cavalry",
-    "heavy-cavalry", "heavy-cavalry", "heavy-cavalry",
+    "cavalry", "cavalry", "cavalry", "cavalry", "cavalry", "cavalry",
     "artillery", "artillery", "artillery", "artillery",
   ],
   coalition: [
     "infantry", "infantry", "infantry", "infantry", "infantry",
     "infantry", "infantry", "infantry", "infantry",
-    "cavalry", "cavalry",
-    "heavy-cavalry",
+    "cavalry", "cavalry", "cavalry",
     "artillery", "artillery", "artillery",
   ],
 };
 
-// Resupply can raise fresh formations of the common arms — elite Heavy Cavalry can't be replaced.
+// Resupply can raise fresh formations of any arm in the order of battle.
 export const RESUPPLY_KINDS: UnitKind[] = ["infantry", "cavalry", "artillery"];

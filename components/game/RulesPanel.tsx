@@ -9,11 +9,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🪖 The Armies",
-    body: "Both armies begin already drawn up — France along the western edge, the Coalition along the eastern edge — so there's no placement step. Each side fields 15 units, but not the same 15. France brings a shock army: 5 Infantry, 3 Cavalry, 3 Heavy Cavalry and 4 Artillery. The Coalition brings a defensive one built on massed foot: 9 Infantry, 2 Cavalry, 1 Heavy Cavalry and 3 Artillery. Infantry stand in the forward column, everything else behind. Since Heavy Cavalry can never be replaced, France has three irreplaceable units to spend carefully and the Coalition only one.",
+    body: "Both armies begin already drawn up — France along the western edge, the Coalition along the eastern edge — so there's no placement step. Each side fields 15 units, but not the same 15. France brings a shock army: 5 Infantry, 6 Cavalry and 4 Artillery. The Coalition brings a defensive one built on massed foot: 9 Infantry, 3 Cavalry and 3 Artillery. Infantry stand in the forward column, Cavalry and Artillery behind.",
   },
   {
     title: "🚚 1. Resupply",
-    body: "Each resupply action does one of two things: bring ONE worn (reduced) unit back to full strength, or muster ONE fresh formation at half strength on your own edge of the board. To be brought back up, a unit must trace a line of supply back to a town your side controls or to your own edge — a line that can't pass through enemy units or their Zones of Control, and a unit standing next to an enemy is cut off entirely and must break contact first. Units eligible to recover are ringed in green. Fresh formations can be Infantry, Cavalry or Artillery — elite Heavy Cavalry can never be replaced.",
+    body: "Each resupply action does one of two things: bring ONE worn (reduced) unit back to full strength, or muster ONE fresh formation at half strength on your own edge of the board. To be brought back up, a unit must trace an unbroken line back to a town your side controls or to your own edge — hex to hex, through friendly-held ground only. Any enemy unit adjacent to a hex on that line — including the unit's own hex — blocks it: standing next to the enemy cuts a unit off from supply completely, whether it's alone in the open or holding down a town, and it must break contact before it can recover. Units eligible to recover are ringed in green. Fresh formations can be Infantry, Cavalry or Artillery.",
   },
   {
     title: "📅 The Reinforcement Schedule",
@@ -21,7 +21,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🏰 Sieges",
-    body: "A garrison sitting in a town its own side controls is the exception to all of that: it draws supply from the town itself and can always be brought back to full strength, however many enemies are pressed up against it. The only way to starve it out is to close a complete ring — every single hex around the town occupied by your units. Leave one gap and the garrison keeps recovering.",
+    body: "A town your side controls is a supply source in its own right — a garrison sitting on one, or a unit that can trace a clear path to one, is in supply just like it would be tracing back to its own edge. But that town gives no special immunity: the same adjacency rule applies, so a single enemy unit pressed up against the garrison cuts it off from the town under its own feet exactly as it would cut off a unit in the open. There's no need to close a full ring around it — one enemy neighbor is enough to stop its recovery.",
   },
   {
     title: "🐎 2. Cavalry Moves",
@@ -33,7 +33,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🎲 Combat Results Table",
-    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Odds always round down in the defender's favor — a ratio has to actually clear a threshold to reach the next column (1.8:1 stays 1:1, it doesn't round up to 2:1). Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out. A unit's first Eliminated or Exchange result doesn't remove it — it's reduced to half Power instead. Only a second such hit, once it's already reduced, actually takes it off the board.",
+    body: "A die is rolled against the combined odds, giving one of six results: Attacker(s) Eliminated, Attacker(s) Retreat, Defender Retreats, Exchange (one unit lost on each side), Defender Eliminated, or No Effect. Odds always round down in the defender's favor — a ratio has to actually clear a threshold to reach the next column (1.8:1 stays 1:1, it doesn't round up to 2:1). Retreats are the most common outcome on both sides of the table — bad odds usually just send the attacker falling back rather than destroying it, and good odds usually push the defender back rather than wiping it out. A unit's first Eliminated or Exchange result doesn't remove it — it's reduced to half Power instead. Only a second such hit, once it's already reduced, actually takes it off the board. Every combat log entry leads with the named result, then says plainly who paid for it — e.g. \"Defender Eliminated — Coalition loses Line Infantry (reduced to half strength)\" — so you can read the outcome at a glance.",
   },
   {
     title: "🏃 Retreats",
@@ -61,11 +61,11 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: "🗺 Terrain",
-    body: "Terrain multiplies a defender's Power rather than adding a flat bonus, so it rewards your strongest units the most. Open Field: no change (×1). Forest, Hill & Town: defense ×2. Marsh: defense ×1.5. Forest & Hill cost 2 movement points to enter, Marsh costs 3, Town costs 1 and is an objective.",
+    body: "Terrain multiplies a defender's Power rather than adding a flat bonus, so it rewards your strongest units the most. Open Field: no change (×1). Forest, Hill & Town: defense ×2. Marsh: defense ×1.5. Forest & Hill cost 2 movement points to enter, Marsh costs 3, Town costs 1 and is an objective. France's home edge out through Rocheval, its first objective, is kept clear of hills and marsh and forest is scarce there, so the opening advance moves fast — rough terrain thickens up further east.",
   },
   {
     title: "🧭 Unit Types",
-    body: "Each unit's numbers read Power-Movement. Cavalry (6 Power / 5 Movement) are fast scouts and skirmishers. Heavy Cavalry (12 Power / 5 Movement) are the hardest hitters on the field and keep Cavalry's speed and two-move phases — a battering ram for the Attacker. Infantry (8 Power / 4 Movement) are the balanced backbone of the army. Artillery (10 Power / 3 Movement) hits hard but is slow to reposition and defends at only 2. A reduced unit fights at half its listed Power (shown as a violet-outlined counter) until it's eliminated or the battle ends — its Movement is unaffected.",
+    body: "Each unit's numbers read Power-Movement. Cavalry (6 Power / 5 Movement) are fast scouts and skirmishers — the only arm that gets a move in the opening Cavalry phase as well as the general move later, giving it two moves in a turn. Infantry (8 Power / 4 Movement) are the balanced backbone of the army. Artillery (10 Power / 3 Movement) hits hard but is slow to reposition and defends at only 2. A reduced unit fights at half its listed Power (shown as a violet-outlined counter) until it's eliminated or the battle ends — its Movement is unaffected.",
   },
 ];
 

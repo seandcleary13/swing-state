@@ -1,11 +1,10 @@
 import { hexDistance, hexKey, type HexCoord } from "./hex";
 import { TERRAIN_DEFS, TOWNS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
-import { rollCombat } from "./combat";
+import { narrateCombat, rollCombat } from "./combat";
 import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
 import { ORDER_OF_BATTLE, RESUPPLY_KINDS, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
-import type { CasualtyOutcome } from "./units";
 import { canTraceSupply, newUnitId, resupplyAllowance, scheduledDrafts } from "./supply";
 import { applyScheduledDrafts, buildCavalryQueue, buildCombatQueue, buildMoveQueue, stepAdvance, stepCombat, stepResupply } from "./ai";
 import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
@@ -13,14 +12,14 @@ import type { AiTurnState, Faction, GameState, Unit, UnitKind } from "./types";
 // Both armies start on the board, foot in the forward column and everything else behind.
 // Each table is index-aligned with that side's ORDER_OF_BATTLE list.
 const DEPLOY: Record<Faction, Array<[number, number]>> = {
-  // France: 5 infantry forward on column 1; 3 cavalry, 3 heavy cavalry, 4 guns on column 0.
+  // France: 5 infantry forward on column 1; 6 cavalry, 4 guns on column 0.
   france: [
     [1, 1], [1, 4], [1, 6], [1, 9], [1, 12],
     [0, 2], [0, 7], [0, 11],
     [0, 4], [0, 6], [0, 9],
     [0, 0], [0, 5], [0, 10], [0, 13],
   ],
-  // Coalition: 9 infantry forward on column 17; 2 cavalry, 1 heavy cavalry, 3 guns on column 18.
+  // Coalition: 9 infantry forward on column 17; 3 cavalry, 3 guns on column 18.
   coalition: [
     [17, 0], [17, 2], [17, 3], [17, 5], [17, 6], [17, 8], [17, 9], [17, 11], [17, 13],
     [18, 4], [18, 10],
@@ -68,10 +67,6 @@ function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
-}
-
-function casualtyPhrase(outcome: CasualtyOutcome): string {
-  return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
 }
 
 function terrainMultiplier(state: GameState, pos: HexCoord): number {
@@ -369,52 +364,71 @@ export function gameReducer(state: GameState, action: Action): GameState {
 
       let text = "";
       if (result === "NE") {
-        text = `${attackerNames} attack ${defenderName} at ${odds} — no effect (roll ${roll}).`;
+        text = narrateCombat({ result, odds, roll, losses: [] });
       } else if (result === "AE") {
         if (bombardingOnly) {
-          text = `${attackerNames} bombard ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`;
+          text = narrateCombat({ result, odds, roll, losses: [], note: "the barrage goes wide" });
         } else {
-          const casualties = adjacentAttackers.map((a) => {
+          const losses = adjacentAttackers.map((a) => {
             const r = applyCasualty(units, a.id);
             units = r.units;
-            return { name: unitDisplayName(state.playerFaction, a.kind), outcome: r.outcome };
+            return { faction: state.playerFaction, unitLabel: unitDisplayName(state.playerFaction, a.kind), outcome: r.outcome };
           });
-          const clause =
-            casualties.length === 1
-              ? `repulsed and ${casualtyPhrase(casualties[0].outcome)}`
-              : joinNames(casualties.map((c) => `${c.name} ${casualtyPhrase(c.outcome)}`));
-          text = `${attackerNames} attack ${defenderName} at ${odds} — ${clause} (roll ${roll}).`;
+          text = narrateCombat({ result, odds, roll, losses });
         }
       } else if (result === "DE") {
         const r = applyCasualty(units, defender.id);
         units = r.units;
-        text = `${attackerNames} attack ${defenderName} at ${odds} — enemy ${casualtyPhrase(r.outcome)} (roll ${roll})!`;
+        text = narrateCombat({
+          result,
+          odds,
+          roll,
+          losses: [{ faction: state.aiFaction, unitLabel: defenderName, outcome: r.outcome }],
+        });
       } else if (result === "EX") {
         const defResult = applyCasualty(units, defender.id);
         units = defResult.units;
         if (bombardingOnly) {
-          text = `${attackerNames} bombard ${defenderName} at ${odds} — enemy ${casualtyPhrase(defResult.outcome)} (roll ${roll}).`;
+          text = narrateCombat({
+            result,
+            odds,
+            roll,
+            losses: [{ faction: state.aiFaction, unitLabel: defenderName, outcome: defResult.outcome }],
+          });
         } else {
           const weakest = [...adjacentAttackers].sort((a, b) => currentPower(a) - currentPower(b))[0];
           const atkResult = applyCasualty(units, weakest.id);
           units = atkResult.units;
           const weakestName = unitDisplayName(state.playerFaction, weakest.kind);
-          text = `${attackerNames} clash with ${defenderName} at ${odds} — ${defenderName} is ${casualtyPhrase(defResult.outcome)}, and ${weakestName} is ${casualtyPhrase(atkResult.outcome)} (roll ${roll}).`;
+          text = narrateCombat({
+            result,
+            odds,
+            roll,
+            losses: [
+              { faction: state.aiFaction, unitLabel: defenderName, outcome: defResult.outcome },
+              { faction: state.playerFaction, unitLabel: weakestName, outcome: atkResult.outcome },
+            ],
+          });
         }
       } else if (result === "DR") {
         const retreat = computeRetreat(state, defender.pos, attackers.map((a) => a.pos), MAX_RETREAT_HEXES);
         if (retreat) {
           units[defender.id] = { ...defender, pos: retreat, routed: true };
-          text = `${attackerNames} attack ${defenderName} at ${odds} — enemy falls back (roll ${roll}).`;
+          text = narrateCombat({ result, odds, roll, losses: [], fellBack: { faction: state.aiFaction, unitLabel: defenderName } });
         } else {
           const r = applyCasualty(units, defender.id);
           units = r.units;
-          text = `${attackerNames} attack ${defenderName} at ${odds} — no room to retreat, enemy ${casualtyPhrase(r.outcome)} (roll ${roll}).`;
+          text = narrateCombat({
+            result,
+            odds,
+            roll,
+            losses: [{ faction: state.aiFaction, unitLabel: `${defenderName} — no room to retreat`, outcome: r.outcome }],
+          });
         }
       } else if (result === "Ar") {
         text = bombardingOnly
-          ? `${attackerNames} bombard ${defenderName} at ${odds} — no effect (roll ${roll}).`
-          : `${attackerNames} attack ${defenderName} at ${odds} — repulsed and falling back (roll ${roll}).`;
+          ? narrateCombat({ result, odds, roll, losses: [], note: "no effect" })
+          : narrateCombat({ result, odds, roll, losses: [], fellBack: { faction: state.playerFaction, unitLabel: attackerNames } });
       }
 
       let next: GameState = {

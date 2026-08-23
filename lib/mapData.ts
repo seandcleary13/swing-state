@@ -27,14 +27,18 @@ export const TOWNS: TownDef[] = [
   { col: 14, row: 9, name: "Marbecourt" },
 ];
 
+// France's opening ground — its home edge out through Rocheval, the first objective — is kept
+// clear of rough terrain so the Attacker can move quickly in the early turns. Hills and marsh
+// thicken up from here east, toward the Coalition's side of the map.
+const WEST_LIGHT_TERRAIN_COL = 8;
+
 const HILL_HEXES: Array<[number, number]> = [
-  [8, 0], [8, 1], [8, 2], [7, 4], [7, 5],
-  [4, 7], [4, 8], [4, 9], [3, 11], [3, 12],
-  [9, 4], [9, 5], [10, 5], [1, 9], [1, 10], [10, 8], [10, 9],
+  [8, 0], [8, 1], [8, 2],
+  [9, 4], [9, 5], [10, 5], [10, 8], [10, 9],
   [12, 1], [12, 2], [13, 5], [14, 6], [16, 3], [15, 10], [15, 11], [13, 12],
 ];
 
-const MARSH_HEXES: Array<[number, number]> = [[4, 6], [3, 9], [11, 4], [15, 7]];
+const MARSH_HEXES: Array<[number, number]> = [[11, 4], [15, 7]];
 
 const ROAD_ROWS = [2, 7];
 
@@ -78,8 +82,9 @@ export function buildMap(): Record<string, HexTile> {
         terrain = "hill";
       } else if (marshSet.has(key)) {
         terrain = "marsh";
-      } else if (!isDeployFrance && !isDeployCoalition && rng() < 0.2) {
-        terrain = "forest";
+      } else if (!isDeployFrance && !isDeployCoalition) {
+        const forestChance = col < WEST_LIGHT_TERRAIN_COL ? 0.07 : 0.2;
+        if (rng() < forestChance) terrain = "forest";
       }
 
       const tile: HexTile = {

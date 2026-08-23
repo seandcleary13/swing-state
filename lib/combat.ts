@@ -1,3 +1,6 @@
+import type { Faction } from "./types";
+import type { CasualtyOutcome } from "./units";
+
 export type CombatResult = "AE" | "Ar" | "DR" | "EX" | "DE" | "NE";
 
 export const RESULT_LABELS: Record<CombatResult, string> = {
@@ -45,4 +48,59 @@ export function rollCombat(attack: number, defense: number, roll: number): { odd
   const odds = oddsColumnFor(attack, defense);
   const idx = Math.min(Math.max(roll - 1, 0), 5);
   return { odds, result: CRT[odds][idx] };
+}
+
+// --- Combat log narration -------------------------------------------------------------------
+// Every combat log line leads with the named CRT result, then states plainly which side lost
+// what — "Defender Eliminated — Coalition loses Foot Battery" — instead of burying that in
+// attack-narrative prose the reader has to parse to find out who actually lost a unit.
+
+export interface CombatLoss {
+  faction: Faction;
+  unitLabel: string;
+  outcome: CasualtyOutcome;
+}
+
+export interface CombatFallback {
+  faction: Faction;
+  unitLabel: string;
+}
+
+function factionLabel(f: Faction): string {
+  return f === "france" ? "France" : "Coalition";
+}
+
+function joinClauses(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]}, and ${parts[1]}`;
+  return `${parts.slice(0, -1).join("; ")}; and ${parts[parts.length - 1]}`;
+}
+
+export function narrateCombat(opts: {
+  result: CombatResult;
+  odds: OddsColumn;
+  roll: number;
+  /** Units that took a casualty (reduced or eliminated) as a direct result of this roll. */
+  losses: CombatLoss[];
+  /** A side that fell back with no casualty this roll — the retreat itself logs separately. */
+  fellBack?: CombatFallback | null;
+  /** Override the body clause entirely, for bombarding no-effect cases ("the barrage goes wide"). */
+  note?: string;
+}): string {
+  const lead = RESULT_LABELS[opts.result];
+  let body: string;
+  if (opts.note) {
+    body = opts.note;
+  } else if (opts.losses.length) {
+    body = joinClauses(
+      opts.losses.map(
+        (l) => `${factionLabel(l.faction)} loses ${l.unitLabel}${l.outcome === "reduced" ? " (reduced to half strength)" : ""}`
+      )
+    );
+  } else if (opts.fellBack) {
+    body = `${factionLabel(opts.fellBack.faction)}'s ${opts.fellBack.unitLabel} falls back`;
+  } else {
+    body = "no casualties";
+  }
+  return `${lead} — ${body} (${opts.odds}, roll ${opts.roll}).`;
 }

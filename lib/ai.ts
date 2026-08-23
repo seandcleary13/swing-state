@@ -1,17 +1,12 @@
 import { hexDistance, hexKey, hexNeighbors, type HexCoord } from "./hex";
 import { TERRAIN_DEFS } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
-import { rollCombat } from "./combat";
+import { narrateCombat, rollCombat } from "./combat";
 import { computeRetreat, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
 import { addLog } from "./log";
 import { RESUPPLY_KINDS, UNIT_TYPES, applyCasualty, attackRange, currentPower, defensePower, defenseValue, isCavalryKind, unitDisplayName } from "./units";
-import type { CasualtyOutcome } from "./units";
 import { canTraceSupply, newUnitId, openHomeHexes, scheduledDrafts } from "./supply";
 import type { Faction, GameState, Unit, UnitKind } from "./types";
-
-function casualtyPhrase(outcome: CasualtyOutcome): string {
-  return outcome === "eliminated" ? "eliminated" : "reduced to half strength";
-}
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -261,48 +256,81 @@ export function stepCombat(state: GameState, unitId: string): GameState {
   };
 
   if (result === "NE") {
-    next = addLog(next, `${attackerName} attacks ${defenderName} at ${odds} — no effect (roll ${roll}).`, "combat");
+    next = addLog(next, narrateCombat({ result, odds, roll, losses: [] }), "combat");
   } else if (result === "AE") {
     if (bombarding) {
-      next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — the barrage goes wide (roll ${roll}).`, "combat");
+      next = addLog(next, narrateCombat({ result, odds, roll, losses: [], note: "the barrage goes wide" }), "combat");
     } else {
       const r = applyCasualty(next.units, live.id);
-      next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — attacker ${casualtyPhrase(r.outcome)} (roll ${roll}).`, "combat");
+      next = addLog(
+        { ...next, units: r.units },
+        narrateCombat({ result, odds, roll, losses: [{ faction: aiFaction, unitLabel: attackerName, outcome: r.outcome }] }),
+        "combat"
+      );
     }
   } else if (result === "Ar") {
     if (bombarding) {
-      next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — no effect (roll ${roll}).`, "combat");
+      next = addLog(next, narrateCombat({ result, odds, roll, losses: [], note: "no effect" }), "combat");
     } else {
       const retreat = computeRetreat(next, live.pos, [bestTarget.pos], MAX_RETREAT_HEXES);
       if (retreat) {
         next = addLog(
           { ...next, units: { ...next.units, [live.id]: { ...next.units[live.id], pos: retreat } } },
-          `${attackerName} attacks ${defenderName} at ${odds} — attacker falls back (roll ${roll}).`,
+          narrateCombat({ result, odds, roll, losses: [], fellBack: { faction: aiFaction, unitLabel: attackerName } }),
           "combat"
         );
       } else {
         const r = applyCasualty(next.units, live.id);
-        next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — no room to retreat, attacker ${casualtyPhrase(r.outcome)} (roll ${roll}).`, "combat");
+        next = addLog(
+          { ...next, units: r.units },
+          narrateCombat({
+            result,
+            odds,
+            roll,
+            losses: [{ faction: aiFaction, unitLabel: `${attackerName} — no room to retreat`, outcome: r.outcome }],
+          }),
+          "combat"
+        );
       }
     }
   } else if (result === "DE") {
     const r = applyCasualty(next.units, bestTarget.id);
-    next = addLog({ ...next, units: r.units }, `${attackerName} attacks ${defenderName} at ${odds} — defender ${casualtyPhrase(r.outcome)} (roll ${roll})!`, "combat");
+    next = addLog(
+      { ...next, units: r.units },
+      narrateCombat({ result, odds, roll, losses: [{ faction: playerFaction, unitLabel: defenderName, outcome: r.outcome }] }),
+      "combat"
+    );
   } else if (result === "EX") {
     const defResult = applyCasualty(next.units, bestTarget.id);
     next = { ...next, units: defResult.units };
     if (bombarding) {
-      next = addLog(next, `${attackerName} bombards ${defenderName} at ${odds} — defender ${casualtyPhrase(defResult.outcome)} (roll ${roll}).`, "combat");
+      next = addLog(
+        next,
+        narrateCombat({ result, odds, roll, losses: [{ faction: playerFaction, unitLabel: defenderName, outcome: defResult.outcome }] }),
+        "combat"
+      );
     } else {
       const atkResult = applyCasualty(next.units, live.id);
       next = addLog(
         { ...next, units: atkResult.units },
-        `${attackerName} and ${defenderName} clash at ${odds} — ${defenderName} is ${casualtyPhrase(defResult.outcome)}, and ${attackerName} is ${casualtyPhrase(atkResult.outcome)} (roll ${roll}).`,
+        narrateCombat({
+          result,
+          odds,
+          roll,
+          losses: [
+            { faction: playerFaction, unitLabel: defenderName, outcome: defResult.outcome },
+            { faction: aiFaction, unitLabel: attackerName, outcome: atkResult.outcome },
+          ],
+        }),
         "combat"
       );
     }
   } else if (result === "DR") {
-    next = addLog(next, `${attackerName} attacks ${defenderName} at ${odds} — defender falls back (roll ${roll}).`, "combat");
+    next = addLog(
+      next,
+      narrateCombat({ result, odds, roll, losses: [], fellBack: { faction: playerFaction, unitLabel: defenderName } }),
+      "combat"
+    );
     const pendingAutoAdvance = wasAdjacent ? { attackerId: live.id, hex: vacatedPos } : null;
     next = beginRetreats(next, [bestTarget.id], live.pos);
     if (next.aiTurnState) {

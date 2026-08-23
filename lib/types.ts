@@ -27,7 +27,7 @@ export interface HexTile {
   deploymentFor?: Faction;
 }
 
-export type UnitKind = "cavalry" | "heavy-cavalry" | "infantry" | "artillery";
+export type UnitKind = "cavalry" | "infantry" | "artillery";
 
 export interface UnitTypeDef {
   kind: UnitKind;
