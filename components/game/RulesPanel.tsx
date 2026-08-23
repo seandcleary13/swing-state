@@ -5,7 +5,7 @@ import CrtTable from "./CrtTable";
 const SECTIONS: { title: string; body: string }[] = [
   {
     title: "🎯 Objective — Attacker vs. Defender",
-    body: "France is the Attacker; the Coalition is the Defender and starts the campaign already holding all 5 towns. France must capture every single town before Turn 8 ends, or wipe out the Coalition army outright — either one is an immediate breakthrough. The Coalition doesn't need to retake anything: if it still holds even one town when the clock runs out (or if France's army is destroyed first), the Coalition has held out and wins.",
+    body: "France is the Attacker; the Coalition is the Defender and starts the campaign already holding all 5 towns, with the three central towns — Vieuxpont, Saint-Aubry and Hauteclaire — already dug in with a half-strength garrison ahead of the main line. Wiping out the Coalition army outright is an immediate breakthrough. Capturing towns is not: the campaign always runs the full 8 turns, and only the final tally matters — whoever controls every single town when Turn 8 ends wins. A town captured early can still be retaken, so France holding all 5 towns mid-campaign isn't a win yet, and the Coalition can claw one back right up to the last turn.",
   },
   {
     title: "🪖 The Armies",

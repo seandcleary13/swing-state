@@ -1,5 +1,5 @@
 import { hexDistance, hexKey, type HexCoord } from "./hex";
-import { TERRAIN_DEFS, buildMap } from "./mapData";
+import { TERRAIN_DEFS, TOWNS, buildMap } from "./mapData";
 import { computeReachable, unitAt } from "./movement";
 import { rollCombat } from "./combat";
 import { computeRetreat, retreatStepOptions, beginRetreats, MAX_RETREAT_HEXES } from "./retreat";
@@ -112,10 +112,6 @@ function finalizeCombatOutcome(state: GameState): GameState {
     next = addLog(next, "The Coalition army has been annihilated — the Grande Armée overruns the field!", "victory");
     return finalizeVictory(next, next.attackerFaction, "annihilation-defender");
   }
-  if (attackerHasOverrun(next)) {
-    next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
-    return finalizeVictory(next, next.attackerFaction, "overrun");
-  }
   return next;
 }
 
@@ -168,6 +164,26 @@ export function initGameState(): GameState {
       const id = `${faction}-${i}`;
       units[id] = { id, faction, kind, pos: { col, row }, hasCavalryMoved: false, hasMoved: false, hasAttacked: false, routed: false, reduced: false };
     });
+  }
+
+  // The three central towns start with a half-strength Coalition garrison already dug in,
+  // ahead of the main line drawn up on the eastern edge.
+  const GARRISON_TOWNS = ["Vieuxpont", "Saint-Aubry", "Hauteclaire"];
+  for (const townName of GARRISON_TOWNS) {
+    const town = TOWNS.find((t) => t.name === townName);
+    if (!town) continue;
+    const id = `coalition-garrison-${town.name}`;
+    units[id] = {
+      id,
+      faction: "coalition",
+      kind: "infantry",
+      pos: { col: town.col, row: town.row },
+      hasCavalryMoved: false,
+      hasMoved: false,
+      hasAttacked: false,
+      routed: false,
+      reduced: true,
+    };
   }
 
   return {
@@ -327,10 +343,6 @@ export function gameReducer(state: GameState, action: Action): GameState {
       let next: GameState = { ...state, units, selectedUnitId: null, reachable: {} };
       next = recomputeObjectiveControl(next);
       next = addLog(next, `${unitDisplayName(state.playerFaction, unit.kind)} advances to ${tile.objectiveName ?? `${TERRAIN_DEFS[tile.terrain].label} (${action.hex.col}-${action.hex.row})`}.`);
-      if (attackerHasOverrun(next)) {
-        next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
-        return finalizeVictory(next, next.attackerFaction, "overrun");
-      }
       return next;
     }
 
@@ -616,6 +628,10 @@ function finalizeAiTurn(state: GameState): GameState {
 
   const nextTurn = next.turn + 1;
   if (nextTurn > next.totalTurns) {
+    if (attackerHasOverrun(next)) {
+      next = addLog(next, "Every town has fallen — the Grande Armée has broken through!", "victory");
+      return finalizeVictory({ ...next, aiTurnState: null }, next.attackerFaction, "overrun");
+    }
     next = addLog(next, "The campaign clock runs out — the Coalition has held out!", "victory");
     return finalizeVictory({ ...next, aiTurnState: null }, next.defenderFaction, "held-out");
   }
